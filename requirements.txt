@@ -1,0 +1,41 @@
+# ============================================================
+# 灵元大模型 (Lingyuan Model) — Python 依赖声明
+# ------------------------------------------------------------
+# 本项目为纯 Python 标准库实现（pure Python stdlib），
+# 运行与测试均不依赖任何第三方 pip 包。
+#
+# The Lingyuan Model is implemented using only the Python
+# standard library. No third-party pip packages are required
+# to run or test the project.
+#
+# 直接运行测试：
+#   python lingyuan_full.py test
+# ============================================================
+
+
+# --- 可选依赖（按需取消注释 / Optional — uncomment as needed）---
+
+# 测试与质量 / Testing & quality
+# pytest>=7.4            # 更丰富的测试运行器（项目内置测试亦可用 pytest 收集）
+# pytest-cov>=4.1        # 测试覆盖率统计
+# ruff>=0.1.0            # 代码静态检查与格式化
+# mypy>=1.7              # 静态类型检查
+
+# 数值与科学计算 / Numerical & scientific computing
+# numpy>=1.26            # 数值计算加速
+# pandas>=2.1            # 数据处理与分析
+
+# 模型与推理 / Model & inference
+# torch>=2.1             # 深度学习推理后端
+# transformers>=4.36     # 预训练模型加载与推理
+
+# 服务与接口 / Service & API
+# fastapi>=0.104         # REST API 服务框架
+# uvicorn[standard]>=0.24  # ASGI 服务器
+# pydantic>=2.5          # 数据模型校验
+
+# 基础设施工具 / Infrastructure utilities
+# requests>=2.31         # HTTP 客户端（多供应商 API 调用）
+# httpx>=0.25            # 异步 HTTP 客户端
+# redis>=5.0             # 缓存与消息队列
+# psycopg[binary]>=3.1   # PostgreSQL 驱动

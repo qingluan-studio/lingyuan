@@ -958,3 +958,35 @@ class VendorScheduler:
                 continue
             tasks.append(self.get_task_status(task.task_id))
         return tasks
+
+
+# ============================================================
+# ENTRY POINT [入口]
+# ============================================================
+
+def main():
+    """主入口函数 - 委托给完整实现"""
+    import sys
+    # 检查是否是其他模块已经定义了main
+    # (part5.py 中定义了完整的 main 函数和测试入口)
+    try:
+        # 尝试调用已加载的 main 函数
+        if 'main' in globals() and callable(globals()['main']) and globals()['main'] is not main:
+            return globals()['main']()
+        elif 'main' in dir():
+            return main.__wrapped__() if hasattr(main, '__wrapped__') else None
+    except Exception:
+        pass
+
+    if len(sys.argv) > 1 and sys.argv[1] == "test":
+        print("请运行: python part5.py test")
+        print("(lingyuan_full.py 仅包含基础设施层, 完整测试入口在 part5.py)")
+        return None
+    else:
+        print("灵元大模型 - 基础设施模块")
+        print("完整系统启动请运行: python part5.py")
+        return None
+
+
+if __name__ == "__main__":
+    main()

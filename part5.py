@@ -607,6 +607,10 @@ class LingyuanOrchestrator:
         self.dashboard = MobileDashboard(self)
         self.closed_loop = ClosedLoopEngine(self)
 
+        # 六层级递进融合决策引擎
+        self.fusion_engine = FusionDecisionEngine()
+        self.fusion_engine.initialize()
+
         # 注册初始模型(如果无模型)
         if len(self.data_engine.model_data.assets) == 0:
             self._register_initial_model()
@@ -618,6 +622,7 @@ class LingyuanOrchestrator:
         print(f"  - CI/CD流水线: GitHub触发器已配置")
         print(f"  - 移动仪表盘: 已就绪")
         print(f"  - 闭环引擎: {'自动' if self.closed_loop.auto_optimize else '手动'}模式")
+        print(f"  - 融合决策引擎: 六层级递进融合已初始化")
 
     def _register_initial_model(self):
         """注册初始基座模型"""
@@ -745,6 +750,40 @@ class LingyuanOrchestrator:
             results.append(result)
         return {"cycles": len(results), "results": results}
 
+    def run_fusion_decision(self, system_state: Dict = None) -> Dict:
+        """运行六层级融合决策
+
+        Args:
+            system_state: 系统状态, 为空时自动采集
+        """
+        if system_state is None:
+            # 自动采集系统状态
+            infra = self.infra.dashboard()
+            wallet = infra.get("token_wallet", {})
+            energy = infra.get("energy", {})
+
+            # 从供应商获取GPU状态
+            vendors = self.infra.scheduler.get_all_vendors() if hasattr(self.infra.scheduler, 'get_all_vendors') else []
+
+            system_state = {
+                "remaining_vram": max(0, 80 - energy.get("total_energy_kwh", 0) * 0.5),
+                "consumption_rate": 1.0 + len(vendors) * 0.1,
+                "actual_gen_rate": 1.0,
+                "kv_hit_rate": 0.75 + random.uniform(-0.1, 0.1),
+                "seq_length": random.choice([256, 512, 1024, 2048]),
+                "batch_size": random.choice([1, 2, 4, 8]),
+                "fragmentation": round(random.uniform(0.03, 0.20), 4),
+                "swap_ratio": round(random.uniform(0.8, 2.5), 2),
+                "vram_decline": round(random.uniform(0.0, 0.8), 4),
+                "requests": [],
+                "slo_urgency": round(random.uniform(0.3, 0.8), 2),
+            }
+
+        print(f"\n[融合引擎] 执行六层级决策...")
+        decision = self.fusion_engine.decide(system_state)
+        print(f"[融合引擎] 决策: {decision['decision_summary']}")
+        return decision
+
     # ==================== 全局仪表盘 ====================
 
     def full_dashboard(self) -> Dict:
@@ -761,6 +800,7 @@ class LingyuanOrchestrator:
             "pipeline": self.pipeline.get_pipeline_stats(),
             "closed_loop": self.closed_loop.get_optimization_summary(),
             "mobile": self.dashboard.get_overview(),
+            "fusion_engine": self.fusion_engine.get_dashboard(),
         }
 
     # ==================== 系统管理 ====================
@@ -1272,6 +1312,180 @@ class LingyuanTestSuite:
             self._assert(f"Token倍率-{modality}", abs(ratio - expected_multiplier) < 0.1,
                           f"倍率: {ratio:.1f}x (期望 {expected_multiplier}x)")
 
+    def test_fusion_engine(self, orch: LingyuanOrchestrator):
+        """测试六层级融合决策引擎"""
+        print("\n--- 测试: 六层级融合决策引擎 ---")
+        fusion = orch.fusion_engine
+
+        # 1. 测试快速评估 (正常场景)
+        result = fusion.quick_assess(
+            remaining_vram=60.0,
+            consumption_rate=1.0,
+            fragmentation=0.05,
+            swap_ratio=1.0,
+            vram_decline=0.1,
+        )
+        self._assert("融合决策-正常", "decision_id" in result,
+                      f"决策: {result.get('decision_summary', 'N/A')}")
+        self._assert("融合-OOM概率", 0 <= result.get("oom_probability", -1) <= 1,
+                      f"OOM: {result.get('oom_probability')}")
+
+        # 2. 测试高压力场景
+        result_stress = fusion.quick_assess(
+            remaining_vram=10.0,
+            consumption_rate=3.0,
+            fragmentation=0.25,
+            swap_ratio=3.0,
+            vram_decline=1.0,
+        )
+        self._assert("融合决策-高压", "decision_id" in result_stress,
+                      f"决策: {result_stress.get('decision_summary', 'N/A')}")
+        # 高压场景OOM概率应更高
+        self._assert("融合-OOM升高", result_stress.get("oom_probability", 0) >= result.get("oom_probability", 0),
+                      f"正常: {result.get('oom_probability')} vs 高压: {result_stress.get('oom_probability')}")
+
+    def test_entropy_triple(self, orch: LingyuanOrchestrator):
+        """测试熵增三联监测"""
+        print("\n--- 测试: 熵增三联监测 ---")
+        monitor = orch.fusion_engine.slo_optimizer.oom_predictor.entropy_monitor
+
+        # 正常状态
+        state_ok = monitor.update(0.03, 1.0, 0.1)
+        self._assert("三联-正常无触发", state_ok.triggered_count == 0,
+                      f"触发数: {state_ok.triggered_count}")
+        self._assert("三联-漂移系数1.0", state_ok.drift_multiplier == 1.0,
+                      f"系数: {state_ok.drift_multiplier}")
+
+        # 单项触发
+        state_1 = monitor.update(0.20, 1.0, 0.1)  # 碎片率越线
+        self._assert("三联-单项触发", state_1.triggered_count == 1,
+                      f"触发数: {state_1.triggered_count}")
+        self._assert("三联-漂移×1.2", state_1.drift_multiplier == 1.2,
+                      f"系数: {state_1.drift_multiplier}")
+
+        # 双项触发
+        state_2 = monitor.update(0.20, 2.5, 0.1)  # 碎片+swap越线
+        self._assert("三联-双项触发", state_2.triggered_count == 2,
+                      f"触发数: {state_2.triggered_count}")
+        self._assert("三联-漂移×1.5", state_2.drift_multiplier == 1.5,
+                      f"系数: {state_2.drift_multiplier}")
+
+        # 三联全触发
+        state_3 = monitor.update(0.20, 2.5, 0.8)  # 全部越线
+        self._assert("三联-全触发", state_3.triggered_count == 3,
+                      f"触发数: {state_3.triggered_count}")
+        self._assert("三联-漂移×2.0", state_3.drift_multiplier == 2.0,
+                      f"系数: {state_3.drift_multiplier}")
+        self._assert("三联-强制收缩", state_3.force_shrink,
+                      f"force_shrink: {state_3.force_shrink}")
+
+    def test_oom_prediction(self, orch: LingyuanOrchestrator):
+        """测试OOM破产概率预测"""
+        print("\n--- 测试: OOM破产概率预测 ---")
+        predictor = orch.fusion_engine.slo_optimizer.oom_predictor
+
+        # 充足资源 - 低风险
+        result_safe = predictor.predict(
+            remaining_resource=70.0,
+            consumption_rate=0.5,
+            time_horizon=10.0,
+            fragmentation=0.03,
+            swap_ratio=0.8,
+            vram_decline=0.0,
+        )
+        self._assert("OOM-低风险", result_safe["bankruptcy_prob"] < 0.5,
+                      f"概率: {result_safe['bankruptcy_prob']}")
+        self._assert("OOM-预期时间", result_safe["expected_time_to_oom"] > 0,
+                      f"预期OOM时间: {result_safe['expected_time_to_oom']}s")
+
+        # 资源紧缺 - 高风险
+        result_danger = predictor.predict(
+            remaining_resource=5.0,
+            consumption_rate=3.0,
+            time_horizon=10.0,
+            fragmentation=0.25,
+            swap_ratio=3.0,
+            vram_decline=1.0,
+        )
+        self._assert("OOM-高风险升高", result_danger["bankruptcy_prob"] >= result_safe["bankruptcy_prob"],
+                      f"安全: {result_safe['bankruptcy_prob']} vs 危险: {result_danger['bankruptcy_prob']}")
+
+    def test_multimodel_collaboration(self, orch: LingyuanOrchestrator):
+        """测试多模型协同"""
+        print("\n--- 测试: 多模型协同 ---")
+        mm = orch.fusion_engine.multi_model
+
+        # 测试模型选择
+        req = InferenceRequest(request_id="test_001", prompt="测试", seq_length=1024, priority=2)
+        tier = mm.select_model(req, oom_probability=0.1, slo_urgency=0.5)
+        self._assert("多模型-正常选择", tier in ["70B", "13B", "7B"],
+                      f"选择: {tier}")
+
+        # OOM高时应偏向小模型
+        tier_stress = mm.select_model(
+            InferenceRequest(request_id="test_002", prompt="测试"),
+            oom_probability=0.5, slo_urgency=0.8,
+        )
+        self._assert("多模型-高压切小模型", tier_stress in ["13B", "7B"],
+                      f"高压选择: {tier_stress}")
+
+        # 测试投机解码
+        spec = mm.speculative_decode(req, draft_tier="7B", verify_tier="70B")
+        self._assert("多模型-投机解码", spec["success"],
+                      f"接受率: {spec.get('accept_rate')}")
+        self._assert("多模型-解码加速", spec.get("speedup", 0) > 1.0,
+                      f"加速: {spec.get('speedup')}x")
+
+        # 测试batch优化
+        requests = [
+            InferenceRequest(request_id=f"r{i}", prompt="test", prefix_hash="hash_A" if i < 3 else f"hash_{i}")
+            for i in range(5)
+        ]
+        batch_result = mm.batch_optimize(requests)
+        self._assert("多模型-batch编队", batch_result["success"],
+                      f"batch数: {batch_result['total_batches']}")
+        self._assert("多模型-prefix共享", batch_result["total_kv_cache_saved_gb"] > 0,
+                      f"节省KV cache: {batch_result['total_kv_cache_saved_gb']}GB")
+
+        # 测试请求重排
+        reorder = mm.request_reorder(requests, oom_risk=0.4)
+        self._assert("多模型-请求重排", reorder["success"],
+                      f"策略: {reorder['strategy']}")
+
+    def test_pain_curve(self, orch: LingyuanOrchestrator):
+        """测试痛苦曲线优化"""
+        print("\n--- 测试: 痛苦曲线优化 ---")
+        pain_opt = orch.fusion_engine.slo_optimizer.outer
+
+        # 求解最优曲线
+        curve = pain_opt.solve_optimal_curve(total_budget=5.0, time_steps=30)
+        self._assert("痛苦曲线-求解", len(curve) == 30,
+                      f"曲线长度: {len(curve)}")
+        self._assert("痛苦曲线-预算守恒", abs(sum(curve) - 5.0) < 0.1,
+                      f"总和: {sum(curve):.4f}")
+
+        # 测试痛苦期货协商
+        negotiation = pain_opt.negotiate_pain_futures(
+            current_pain=0.1, target_pain=0.15, action_cost=0.2,
+        )
+        self._assert("痛苦期货-协商", "should_execute" in negotiation,
+                      f"净收益: {negotiation.get('net_benefit')}")
+        self._assert("痛苦期货-决策", isinstance(negotiation["should_execute"], bool),
+                      f"执行: {negotiation['should_execute']}")
+
+    def test_fusion_end_to_end(self, orch: LingyuanOrchestrator):
+        """融合引擎端到端测试"""
+        print("\n--- 测试: 融合引擎端到端 ---")
+
+        # 通过编排器接口运行
+        decision = orch.run_fusion_decision()
+        self._assert("E2E融合-决策生成", "decision_id" in decision,
+                      f"决策: {decision.get('decision_summary')}")
+        self._assert("E2E融合-模型选择", "model_choice" in decision,
+                      f"模型: {decision.get('model_choice')}")
+        self._assert("E2E融合-仪表盘", "total_decisions" in orch.fusion_engine.get_dashboard(),
+                      f"总决策数: {orch.fusion_engine.get_dashboard().get('total_decisions')}")
+
     def test_end_to_end(self, orch: LingyuanOrchestrator):
         """端到端集成测试"""
         print("\n--- 测试: 端到端集成 ---")
@@ -1334,6 +1548,12 @@ class LingyuanTestSuite:
         self.test_multimodal_evaluation(orch)
         self.test_multimodal_token_cost(orch)
         self.test_closed_loop(orch)
+        self.test_fusion_engine(orch)
+        self.test_entropy_triple(orch)
+        self.test_oom_prediction(orch)
+        self.test_multimodel_collaboration(orch)
+        self.test_pain_curve(orch)
+        self.test_fusion_end_to_end(orch)
         self.test_end_to_end(orch)
 
         elapsed = round(time.time() - start_time, 2)

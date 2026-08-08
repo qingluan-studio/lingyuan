@@ -1,0 +1,55 @@
+#!/usr/bin/env python3
+"""灵元大模型 — 测试运行器
+
+统一执行全部模块的测试套件。
+用法: python run_tests.py
+"""
+
+import sys
+import os
+
+# 确保工作目录在路径中
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+
+def main():
+    """加载所有模块并运行测试"""
+    print("=" * 60)
+    print("灵元大模型 — 全局测试运行器")
+    print("=" * 60)
+
+    # 按依赖顺序加载所有模块
+    modules = [
+        "lingyuan_full.py",
+        "part2.py",
+        "part3.py",
+        "part4.py",
+        "part6.py",   # 融合决策引擎 (part5依赖其FusionDecisionEngine)
+        "part5.py",
+    ]
+
+    base_dir = os.path.dirname(os.path.abspath(__file__))
+
+    for mod_file in modules:
+        path = os.path.join(base_dir, mod_file)
+        if os.path.exists(path):
+            print(f"  [加载] {mod_file}")
+            with open(path, 'r', encoding='utf-8') as f:
+                exec(f.read(), globals())
+        else:
+            print(f"  [跳过] {mod_file} (不存在)")
+
+    # 运行测试
+    sys.argv = [sys.argv[0], "test"]
+    if 'main' in globals() and callable(globals()['main']):
+        result = globals()['main']()
+        if result and isinstance(result, dict):
+            failed = result.get("failed", 0)
+            sys.exit(1 if failed > 0 else 0)
+        sys.exit(0)
+    else:
+        print("[错误] 未找到 main() 入口")
+        sys.exit(1)
+
+
+if __name__ == "__main__":
+    main()

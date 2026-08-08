@@ -1,0 +1,99 @@
+# ============================================================
+# 灵元大模型 (Lingyuan Model) — .gitignore
+# ============================================================
+
+# --- 字节码与构建产物 / Byte-compiled & build ---
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+share/python-wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+MANIFEST
+
+# --- 虚拟环境 / Virtual environments ---
+.env
+.venv
+env/
+venv/
+ENV/
+env.bak/
+venv.bak/
+
+# --- 测试与覆盖率 / Testing & coverage ---
+htmlcov/
+.tox/
+.nox/
+.coverage
+.coverage.*
+.cache
+nosetests.xml
+coverage.xml
+*.cover
+*.py,cover
+.hypothesis/
+.pytest_cache/
+cover/
+
+# --- 类型检查与 lint 缓存 / Type checking & lint caches ---
+.mypy_cache/
+.dmypy.json
+dmypy.json
+.pyre/
+.pytype/
+.ruff_cache/
+
+# --- 运行时数据目录 / Runtime data ---
+data/lingyuan/
+lingyuan_data/
+lingyuan_logs/
+lingyuan_config/
+
+# --- 数据目录下的 JSON / JSON in data directories ---
+data/*.json
+data/**/*.json
+lingyuan_data/*.json
+lingyuan_data/**/*.json
+lingyuan_logs/*.json
+lingyuan_config/*.json
+
+# --- 环境变量与密钥 / Environment & secrets ---
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+*.p12
+
+# --- 编辑器与 IDE / Editors & IDEs ---
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.DS_Store
+Thumbs.db
+
+# --- 日志 / Logs ---
+logs/
+*.log
+
+# --- 数据库文件 / Database files ---
+*.db
+*.sqlite
+*.sqlite3

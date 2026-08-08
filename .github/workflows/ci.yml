@@ -1,0 +1,68 @@
+# ============================================================
+# 灵元大模型 (Lingyuan Model) — 持续集成工作流
+# ------------------------------------------------------------
+# 本项目为纯 Python 标准库实现，无需安装任何第三方 pip 包。
+# 流程：检出代码 -> 配置 Python 3.11 -> 安装依赖 -> 运行测试套件
+# 测试入口：python run_tests.py (统一加载全部模块并运行测试)
+# ============================================================
+
+name: CI
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+    branches:
+      - main
+
+# 同一分支的新提交自动取消仍在运行的旧任务，节省算力
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+# 触发的 PR 上自动授予 CI 读写权限（按需收紧）
+permissions:
+  contents: read
+
+jobs:
+  test:
+    name: Test (Python 3.11)
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    steps:
+      - name: 检出代码 / Checkout
+        uses: actions/checkout@v4
+
+      - name: 配置 Python 3.11 / Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          cache: 'pip'
+          cache-dependency-path: requirements.txt
+
+      - name: 升级 pip / Upgrade pip
+        run: python -m pip install --upgrade pip
+
+      - name: 安装依赖 / Install dependencies
+        run: |
+          if [ -f requirements.txt ]; then
+            pip install -r requirements.txt
+          else
+            echo "未找到 requirements.txt，跳过依赖安装（项目仅依赖标准库）。"
+          fi
+
+      - name: 运行测试套件 / Run test suite
+        run: python run_tests.py
+
+      - name: 上传测试产物 / Upload artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: lingyuan-test-artifacts
+          path: |
+            lingyuan_data
+            lingyuan_logs
+          if-no-files-found: ignore
+          retention-days: 7
