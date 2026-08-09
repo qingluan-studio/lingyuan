@@ -736,6 +736,7 @@ class FactChecker:
             "evidence": evidence,
             "confidence": round(confidence, 3),
             "entities_found": [e.name for e in entities],
+            "reason": "verified" if verdict != "uncertain" else "insufficient_evidence",
         }
 
 
@@ -1229,7 +1230,7 @@ def _test_fact_checker():
     checker = FactChecker(kg)
     result = checker.check("Python created_by Guido")
     assert "verdict" in result
-    assert result["verdict"] != "uncertain" or result["reason"] == "no_entities_found"
+    assert result["verdict"] != "uncertain" or result.get("reason", "") == "no_entities_found"
     print("    PASS")
 
 

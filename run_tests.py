@@ -7,6 +7,7 @@
 
 import sys
 import os
+import importlib
 
 # 确保工作目录在路径中
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
@@ -17,8 +18,9 @@ def main():
     print("灵元大模型 — 全局测试运行器")
     print("=" * 60)
 
-    # 按依赖顺序加载所有模块
-    modules = [
+    # ---- 第一阶段: exec 加载核心模块 (part2~part16) 到共享命名空间 ----
+    # 这些模块相互引用, 需要共享全局空间
+    core_modules = [
         "lingyuan_full.py",
         "part2.py",
         "part3.py",
@@ -34,32 +36,51 @@ def main():
         "part14.py",  # API服务: HTTP/OpenAI兼容/WebSocket/gRPC/文档/SDK
         "part15.py",  # MLOps: 实验追踪/任务队列/GPU调度/监控/对比
         "part16.py",  # UI+安全: WebChat/Playground/训练面板/水印/APIKey/血缘
-        "part17.py",  # 虚拟GPU
-        "part18.py",  # GPU加速训练引擎
-        "part19.py",  # MoE混合专家模型
-        "part20.py",  # 智能数据工厂
-        "part21.py",  # 自进化系统(AutoML)
-        "part22.py",  # 分布式推理引擎
-        "part23.py",  # 量化推理引擎
-        "part24.py",  # 多模态融合引擎
-        "part25.py",  # 知识图谱增强系统
-        "part26.py",  # 自适应学习系统
-        "part27.py",  # 安全沙箱与对抗防御
-        "part28.py",  # 边缘部署优化器
-        "part29.py",  # 三架构融合模型(嘴+大脑+眼)
-        "part5.py",
+    ]
+
+    # ---- 第二阶段: 正常 import 扩展模块 (part17~part29) ----
+    # 这些模块通过 part5.py 的延迟导入按需加载, 不进入共享命名空间
+    # 避免类名冲突 (如 InferenceEngine, CurriculumScheduler 等)
+    extension_modules = [
+        "part17", "part18", "part19", "part20", "part21",
+        "part22", "part23", "part24", "part25", "part26",
+        "part27", "part28", "part29",
     ]
 
     base_dir = os.path.dirname(os.path.abspath(__file__))
 
-    for mod_file in modules:
+    # 加载核心模块 (exec 到共享全局空间)
+    for mod_file in core_modules:
         path = os.path.join(base_dir, mod_file)
         if os.path.exists(path):
             print(f"  [加载] {mod_file}")
+            saved_name = globals().get('__name__', '__main__')
+            globals()['__name__'] = mod_file.replace('.py', '_loaded')
             with open(path, 'r', encoding='utf-8') as f:
                 exec(f.read(), globals())
+            globals()['__name__'] = saved_name
         else:
             print(f"  [跳过] {mod_file} (不存在)")
+
+    # 预导入扩展模块 (验证语法和依赖, 但不污染全局命名空间)
+    for mod_name in extension_modules:
+        try:
+            importlib.import_module(mod_name)
+            print(f"  [导入] {mod_name}.py")
+        except Exception as e:
+            print(f"  [警告] {mod_name}.py 导入失败: {e}")
+
+    # 加载 part5.py (编排器, 引用核心模块的类 + 延迟导入扩展模块)
+    part5_path = os.path.join(base_dir, "part5.py")
+    if os.path.exists(part5_path):
+        print(f"  [加载] part5.py")
+        saved_name = globals().get('__name__', '__main__')
+        globals()['__name__'] = 'part5_loaded'
+        with open(part5_path, 'r', encoding='utf-8') as f:
+            exec(f.read(), globals())
+        globals()['__name__'] = saved_name
+    else:
+        print(f"  [跳过] part5.py (不存在)")
 
     # 运行测试
     sys.argv = [sys.argv[0], "test"]

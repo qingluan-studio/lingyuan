@@ -33,10 +33,10 @@ jobs:
 
     steps:
       - name: 检出代码 / Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
 
       - name: 配置 Python 3.11 / Set up Python
-        uses: actions/setup-python@v5
+        uses: actions/setup-python@v6
         with:
           python-version: '3.11'
           cache: 'pip'
@@ -58,7 +58,7 @@ jobs:
 
       - name: 上传测试产物 / Upload artifacts
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v5
         with:
           name: lingyuan-test-artifacts
           path: |

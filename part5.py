@@ -847,7 +847,7 @@ class LingyuanOrchestrator:
         """分布式推理引擎 (延迟初始化)"""
         if self._inference_server is None:
             try:
-                from part22 import InferenceServer, InferenceEngine as InfEng
+                from part22 import InferenceServer, DistributedInferenceEngine as InfEng
                 self._inference_server = InferenceServer()
             except Exception:
                 pass

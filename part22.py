@@ -13,7 +13,7 @@
 
 模块概述:
     本模块实现了生产级分布式推理引擎的核心组件，包括:
-      1. InferenceEngine    — 推理引擎核心 (单GPU/批量/流式/采样/KV缓存/统计)
+      1. DistributedInferenceEngine    — 推理引擎核心 (单GPU/批量/流式/采样/KV缓存/统计)
       2. RequestScheduler   — 请求调度器 (优先级队列/连续批处理/超时/公平调度)
       3. ModelPartitioner   — 模型分区器 (层级分区/流水线/显存均衡/通信优化)
       4. KVCacheManager     — KV缓存管理器 (缓存池/LRU/压缩/共享/显存追踪)
@@ -678,10 +678,10 @@ class KVCacheManager:
 
 
 # ============================================================================
-# InferenceEngine — 推理引擎核心
+# DistributedInferenceEngine — 推理引擎核心
 # ============================================================================
 
-class InferenceEngine:
+class DistributedInferenceEngine:
     """
     推理引擎核心。
     支持单GPU推理、批量推理、流式推理、多种采样策略、KV缓存管理和延迟/吞吐统计。
@@ -2466,14 +2466,14 @@ class InferenceServer:
 
     def __init__(
         self,
-        engine: Optional[InferenceEngine] = None,
+        engine: Optional[DistributedInferenceEngine] = None,
         scheduler: Optional[RequestScheduler] = None,
         monitor: Optional[PerformanceMonitor] = None,
         max_concurrent: int = 16,
         host: str = "0.0.0.0",
         port: int = 8000,
     ):
-        self.engine = engine or InferenceEngine(simulate_latency=False)
+        self.engine = engine or DistributedInferenceEngine(simulate_latency=False)
         self.scheduler = scheduler or RequestScheduler()
         self.monitor = monitor or PerformanceMonitor()
         self.max_concurrent = max_concurrent
@@ -2823,9 +2823,9 @@ def _test_kv_cache_manager():
 
 
 def _test_inference_engine():
-    """测试 InferenceEngine。"""
-    _print_separator("测试 InferenceEngine")
-    engine = InferenceEngine(simulate_latency=False, max_batch_size=4)
+    """测试 DistributedInferenceEngine。"""
+    _print_separator("测试 DistributedInferenceEngine")
+    engine = DistributedInferenceEngine(simulate_latency=False, max_batch_size=4)
 
     # 单序列推理 - greedy
     result = engine.generate("hello world", max_tokens=10, strategy=SamplingStrategy.GREEDY)
@@ -2865,7 +2865,7 @@ def _test_inference_engine():
     print(f"  统计: completed={stats['completed']}, avg_latency={stats['avg_latency_ms']:.2f}ms")
     print(f"    p50={stats['p50_ms']:.2f}ms, p95={stats['p95_ms']:.2f}ms, p99={stats['p99_ms']:.2f}ms")
     print(f"    throughput={stats['throughput_tps']:.2f} tps, qps={stats['qps']:.2f}")
-    print("  [PASS] InferenceEngine 测试通过")
+    print("  [PASS] DistributedInferenceEngine 测试通过")
 
 
 def _test_request_scheduler():
@@ -3115,7 +3115,7 @@ def _test_performance_monitor():
 def _test_inference_server():
     """测试 InferenceServer。"""
     _print_separator("测试 InferenceServer")
-    engine = InferenceEngine(simulate_latency=False)
+    engine = DistributedInferenceEngine(simulate_latency=False)
     monitor = PerformanceMonitor()
     server = InferenceServer(engine=engine, monitor=monitor, max_concurrent=4)
     server.start()
@@ -3183,7 +3183,7 @@ def _test_integration():
     print("  场景: 模拟多请求通过调度器 -> 引擎推理 -> 监控统计的完整流程")
 
     # 初始化所有组件
-    engine = InferenceEngine(simulate_latency=False, max_batch_size=8)
+    engine = DistributedInferenceEngine(simulate_latency=False, max_batch_size=8)
     scheduler = RequestScheduler(max_batch_size=4)
     monitor = PerformanceMonitor()
     lb = LoadBalancer()
@@ -3246,7 +3246,7 @@ def main():
 
     tests = [
         ("KVCacheManager", _test_kv_cache_manager),
-        ("InferenceEngine", _test_inference_engine),
+        ("DistributedInferenceEngine", _test_inference_engine),
         ("RequestScheduler", _test_request_scheduler),
         ("ModelPartitioner", _test_model_partitioner),
         ("EdgeOptimizer", _test_edge_optimizer),
