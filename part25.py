@@ -698,37 +698,39 @@ class FactChecker:
 
         if len(entities) >= 2:
             head, tail = entities[0], entities[1]
-            inferences = self.reasoner.infer_relation(head.eid, tail.eid)
 
-            if inferences:
+            # 优先检查直接关系 (准确率最高)
+            rels = self.graph.query_triples(head=head.eid, tail=tail.eid)
+            if rels:
                 evidence.append({
                     "head": head.name,
                     "tail": tail.name,
-                    "paths": [inf["relations"] for inf in inferences[:3]],
+                    "relation": rels[0].relation,
                 })
-                confidence = min(1.0, len(inferences) * 0.3)
-                verdict = "likely_true" if confidence > 0.5 else "uncertain"
+                confidence = rels[0].confidence
+                verdict = "true"
             else:
-                # 检查是否有直接关系
-                rels = self.graph.query_triples(head=head.eid, tail=tail.eid)
+                # 检查反向关系 (陈述为假)
+                rels = self.graph.query_triples(head=tail.eid, tail=head.eid)
                 if rels:
+                    verdict = "false"
+                    confidence = rels[0].confidence
                     evidence.append({
-                        "head": head.name,
-                        "tail": tail.name,
+                        "head": tail.name,
+                        "tail": head.name,
                         "relation": rels[0].relation,
                     })
-                    confidence = rels[0].confidence
-                    verdict = "true"
                 else:
-                    rels = self.graph.query_triples(head=tail.eid, tail=head.eid)
-                    if rels:
-                        verdict = "false"
-                        confidence = rels[0].confidence
+                    # 无直接关系, 尝试推理路径
+                    inferences = self.reasoner.infer_relation(head.eid, tail.eid)
+                    if inferences:
                         evidence.append({
-                            "head": tail.name,
-                            "tail": head.name,
-                            "relation": rels[0].relation,
+                            "head": head.name,
+                            "tail": tail.name,
+                            "paths": [inf["relations"] for inf in inferences[:3]],
                         })
+                        confidence = min(1.0, len(inferences) * 0.3)
+                        verdict = "likely_true" if confidence > 0.5 else "uncertain"
 
         return {
             "statement": statement,
