@@ -1672,7 +1672,7 @@ class VectorDatabase:
 # ============================================================
 
 @dataclass
-class PromptTemplate:
+class EngineeredPromptTemplate:
     """提示模板"""
     template_id: str
     name: str
@@ -1826,7 +1826,7 @@ class PromptEngineeringStudio:
     """
 
     def __init__(self):
-        self.templates: Dict[str, PromptTemplate] = {}
+        self.templates: Dict[str, EngineeredPromptTemplate] = {}
         self.variants: Dict[str, PromptVariant] = {}
         self.optimizer = PromptOptimizer()
         self.ab_tests: Dict[str, Dict] = {}
@@ -1853,7 +1853,7 @@ class PromptEngineeringStudio:
         ]
 
         for tid, name, cat, template, variables, desc in defaults:
-            self.templates[tid] = PromptTemplate(
+            self.templates[tid] = EngineeredPromptTemplate(
                 template_id=tid, name=name, category=cat,
                 template=template, variables=variables,
                 description=desc,
@@ -1862,10 +1862,10 @@ class PromptEngineeringStudio:
             )
 
     def create_template(self, name: str, category: str, template: str,
-                        variables: List[str] = None, description: str = "") -> PromptTemplate:
+                        variables: List[str] = None, description: str = "") -> EngineeredPromptTemplate:
         """创建模板"""
         tid = f"tpl_{uuid.uuid4().hex[:8]}"
-        tpl = PromptTemplate(
+        tpl = EngineeredPromptTemplate(
             template_id=tid, name=name, category=category,
             template=template, variables=variables or [],
             description=description,

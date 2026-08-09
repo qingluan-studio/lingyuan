@@ -97,3 +97,6 @@ logs/
 *.db
 *.sqlite
 *.sqlite3
+
+# --- 上传文件 / Uploads ---
+.uploads/

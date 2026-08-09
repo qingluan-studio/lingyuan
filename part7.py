@@ -1250,11 +1250,16 @@ class ModelRegistry:
             return {"success": False, "error": f"未知阶段: {target_stage}"}
 
         old_stage = version.stage
-        version.stage = target_stage
 
-        # 生产环境默认100%流量
+        # 提升到生产环境时，自动归档同模型旧的生产版本
         if target_stage == "production":
+            for v in self.versions.values():
+                if v.model_name == version.model_name and v.stage == "production" and v.version_id != version_id:
+                    v.stage = "archived"
+                    v.traffic_percent = 0
             version.traffic_percent = 100.0
+
+        version.stage = target_stage
 
         self.deployment_history.append({
             "version_id": version_id,
@@ -1793,6 +1798,10 @@ class CurriculumTrainer:
 # ============================================================
 # ECONOMIC_ENGINE [经济引擎]
 # ============================================================
+
+# 用电时段定义 (24小时制)
+PEAK_POWER_HOURS = {9, 10, 11, 12, 13, 14, 18, 19, 20, 21}    # 高峰时段
+GREEN_POWER_HOURS = {0, 1, 2, 3, 4, 5, 22, 23}                 # 绿电时段 (夜间风电/光电)
 
 class TokenMarket:
     """Token市场 — 模拟供需关系

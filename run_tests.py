@@ -26,6 +26,14 @@ def main():
         "part6.py",   # 融合决策引擎 (part5依赖其FusionDecisionEngine)
         "part7.py",   # 安全/可观测/API/注册/课程/经济/知识图谱
         "part8.py",   # 联邦学习/蒸馏/RLHF/量化/向量库/提示工程/边缘/记忆
+        "part9.py",   # 模型本体: Transformer/Tokenizer/位置编码/采样/KVCache/训练引擎
+        "part10.py",  # 外部知识接入: 连接器/解析/爬虫/脱敏/版权/训练接口/教师/去重
+        "part11.py",  # 推理服务: 引擎/批处理/流式/缓存/FunctionCall/ChatTemplate
+        "part12.py",  # 模型格式: 序列化/HF导出/ONNX/GGUF/外部导入
+        "part13.py",  # 微调: LoRA/全参数/SFT/DPO/持续学习/领域适配
+        "part14.py",  # API服务: HTTP/OpenAI兼容/WebSocket/gRPC/文档/SDK
+        "part15.py",  # MLOps: 实验追踪/任务队列/GPU调度/监控/对比
+        "part16.py",  # UI+安全: WebChat/Playground/训练面板/水印/APIKey/血缘
         "part5.py",
     ]
 

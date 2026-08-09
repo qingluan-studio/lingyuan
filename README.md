@@ -1,11 +1,13 @@
 # 灵元大模型 Lingyuan Model
 
-> 自主进化 AI 系统 —— 自举训练 · 知识蒸馏 · 多供应商调度 · 多模态评估
+> 自主进化 AI 系统 —— 52 项核心组件 · 22 层架构 · 自举训练 · 知识蒸馏 · 多供应商调度 · 多模态评估
 
 [![CI](https://github.com/qingluan-studio/lingyuan/actions/workflows/ci.yml/badge.svg)](https://github.com/qingluan-studio/lingyuan/actions/workflows/ci.yml)
 [![Python](https://img.shields.io/badge/python-3.11+-blue.svg)](https://www.python.org/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 [![Dependencies](https://img.shields.io/badge/dependencies-zero%20(stdlib)-success.svg)](#环境要求)
+[![Tests](https://img.shields.io/badge/tests-270%20passing-brightgreen.svg)](#测试)
+[![Code](https://img.shields.io/badge/code-38%2C296%20lines-blue.svg)](#文件结构)
 
 灵元大模型（Lingyuan Model，代号"灵元"）是一套以"自主进化"为核心目标的端到端 AI 系统框架。系统将算力经济、数据生成、自举训练、自动评估、Agent 编排、六层级递进融合决策与自优化闭环融为一体，构建出可持续自我迭代的智能体底座。
 
@@ -15,6 +17,7 @@
 
 - [核心特性](#核心特性)
 - [系统架构](#系统架构)
+- [52 项核心组件](#52-项核心组件)
 - [文件结构](#文件结构)
 - [快速开始](#快速开始)
 - [测试](#测试)
@@ -51,11 +54,19 @@
 - **提示工程工作室**：模板管理 / A/B 测试 / 遗传算法优化 / 少样本选择。
 - **边缘部署管理器**：设备注册 / OTA 分阶段发布 / 远程推理 / 健康监控 / 回滚。
 - **对话记忆系统**：短期/长期记忆 / 记忆巩固与衰减 / RAG 检索增强 / 上下文压缩。
+- **Transformer 模型本体**：BPE 分词器 / RoPE 位置编码 / KV Cache / 多种采样策略 / 训练引擎。
+- **外部知识接入**：数据连接器 / 文档解析 / Web 爬虫 / PII 脱敏 / 版权检查 / MinHash 去重。
+- **推理服务**：连续批处理 / 流式输出 / 推理缓存 / Function Calling / Chat 模板。
+- **多格式模型导出**：Safetensors / HuggingFace / ONNX / GGUF / 外部模型导入。
+- **微调能力**：LoRA / 全参数 / SFT / DPO / 持续学习 / 领域适配。
+- **API 服务**：HTTP 服务器 / OpenAI 兼容 API / WebSocket / gRPC / 文档生成 / SDK 生成。
+- **MLOps**：实验追踪 / 任务队列 / GPU 调度 / 训练监控 / 模型对比。
+- **UI 与安全**：Web Chat / Playground / 训练面板 / 模型水印 / API Key 管理 / 数据血缘审计。
 - **零外部依赖**：纯 Python 标准库实现，开箱即用。
 
 ## 系统架构
 
-灵元采用 22 层分层架构，自底向上覆盖从算力基础设施到对话记忆的完整链路：
+灵元采用 22 层分层架构，自底向上覆盖从算力基础设施到 UI 与安全的完整链路：
 
 | #   | 层级           | 核心能力                                                       |
 | --- | -------------- | -------------------------------------------------------------- |
@@ -82,20 +93,85 @@
 | 21  | 检索增强层     | 向量数据库 / HNSW 索引 / RAG / 提示工程                        |
 | 22  | 边缘与记忆层   | 边缘部署 / OTA / 对话记忆 / 记忆巩固衰减                       |
 
+## 52 项核心组件
+
+| # | 组件 | 模块 | 说明 |
+|---|------|------|------|
+| 1 | Token 经济系统 | lingyuan_full | 算力 Token 余额 / 充值 / 消费追踪 |
+| 2 | 能源碳排放追踪 | lingyuan_full | 绿电 / 碳排放 / 碳交易 |
+| 3 | 多厂商算力调度 | lingyuan_full | 跨厂商 GPU 资源调度 |
+| 4 | 冷热分层存储 | part2 | 冷热数据自动分层 |
+| 5 | 数据交易协议 | part2 | 数据资产合规交易 |
+| 6 | 模型即数据 | part2 | 模型权重数据化 |
+| 7 | 血缘追踪 | part2 | 全链路血缘记录 |
+| 8 | 向量表征 | part2 | 模型向量编码 |
+| 9 | 自举数据生成 | part3 | 自动生成训练数据 |
+| 10 | 质量过滤 | part3 | 多维度质量评估 |
+| 11 | 自举训练循环 | part3 | 自我迭代训练 |
+| 12 | 知识蒸馏 | part3 | 大模型 → 轻量模型 |
+| 13 | 安全阀机制 | part3 | 训练安全保护 |
+| 14 | 自动评估器 | part4 | 多维度自动评估 |
+| 15 | 模态专用指标 | part4 | 文本/音频/图像/视频评估 |
+| 16 | 多模态生成 | part4 | 音频/图像/视频生成 |
+| 17 | 多模态评估 | part4 | 跨模态一致性评估 |
+| 18 | Agent 团队编排 | part5 | 6 Agent 协同 |
+| 19 | 工作流引擎 | part5 | DAG 任务编排 |
+| 20 | 空间模型协同 | part5 | 多维空间协作 |
+| 21 | 自优化闭环 | part5 | 评估→反馈→改进 |
+| 22 | GitHub CI/CD | part5 | 事件触发自动化 |
+| 23 | 移动仪表盘 | part5 | 状态/操作/通知 |
+| 24 | 六层级融合决策 | part6 | 递进式融合决策 |
+| 25 | 安全治理 | part7 | 过滤/审计/熔断/红队 |
+| 26 | 可观测性引擎 | part7 | 指标/追踪/异常检测 |
+| 27 | API 网关 | part7 | REST/限流/认证 |
+| 28 | 模型注册中心 | part7 | 版本/A-B/金丝雀/回滚 |
+| 29 | 课程式训练 | part7 | 多阶段/贝叶斯优化 |
+| 30 | 经济引擎 | part7 | Token 市场/拍卖/金库 |
+| 31 | 知识图谱 | part7 | 实体/关系/融合/搜索 |
+| 32 | 联邦学习 | part8 | 差分隐私/安全聚合 |
+| 33 | 模型蒸馏流水线 | part8 | 单/多教师/渐进式 |
+| 34 | RLHF | part8 | 奖励模型/PPO/偏好 |
+| 35 | 量化压缩 | part8 | INT4/INT8/FP16/剪枝 |
+| 36 | 向量数据库 | part8 | HNSW/嵌入/RAG |
+| 37 | 提示工程工作室 | part8 | 模板/A-B/遗传/少样本 |
+| 38 | 边缘部署 | part8 | 设备/OTA/远程推理 |
+| 39 | 对话记忆 | part8 | 短期/长期/巩固/RAG |
+| 40 | Transformer 模型本体 | part9 | BPE/RoPE/KVCache/采样/训练 |
+| 41 | 外部知识接入+脱敏 | part10 | 连接器/解析/爬虫/PII/版权/去重 |
+| 42 | 推理服务 | part11 | 引擎/批处理/流式/缓存/FC/模板 |
+| 43 | 模型格式 | part12 | Safetensors/HF/ONNX/GGUF/导入 |
+| 44 | 微调 | part13 | LoRA/全参数/SFT/DPO/持续/领域 |
+| 45 | API 服务 | part14 | HTTP/OpenAI/WS/gRPC/文档/SDK |
+| 46 | MLOps | part15 | 实验/队列/GPU/监控/对比 |
+| 47 | UI 界面 | part16 | WebChat/Playground/训练面板 |
+| 48 | 模型水印 | part16 | 零宽/词表/统计/句子水印 |
+| 49 | API Key 管理 | part16 | 生成/认证/限流/配额 |
+| 50 | 数据血缘审计 | part16 | 数据记录/模型记录/审计链 |
+| 51 | 外部教师蒸馏 | part10 | API 教师蒸馏/成本追踪 |
+| 52 | 外部训练接口 | part10 | 合规导入/去重/训练配置 |
+
 ## 文件结构
 
 | 文件              | 规模          | 说明                                                                       |
 | ----------------- | ------------- | -------------------------------------------------------------------------- |
 | `lingyuan_full.py` | 992 行        | 主入口与核心运行时，提供 CLI 与测试入口（`python lingyuan_full.py test`）  |
 | `part2.py`        | 861 行        | 基础设施、存储与模型数据层实现                                              |
-| `part3.py`        | 1378 行       | 数据生成层与训练层实现（自举数据生成、质量过滤、自举训练循环、知识蒸馏）   |
-| `part4.py`        | 1226 行       | 评估层与多模态层实现（自动评估器、模态专用指标、多模态生成与评估）         |
-| `part5.py`        | 2324 行       | 编排层、闭环层、管线层、移动仪表盘与全局测试套件（208 个测试用例）         |
-| `part6.py`        | 1251 行       | 六层级递进融合决策引擎实现                                                 |
-| `part7.py`        | 2485 行       | 安全治理 / 可观测性 / API网关 / 模型注册 / 课程训练 / 经济引擎 / 知识图谱  |
-| `part8.py`        | 2868 行       | 联邦学习 / 模型蒸馏 / RLHF / 量化压缩 / 向量数据库 / 提示工程 / 边缘 / 记忆|
-| `run_tests.py`    | 57 行         | 统一测试运行器，按依赖顺序加载所有模块                                     |
-| **合计**          | **13,442 行** | **9 个 Python 文件，零外部依赖，208 个测试**                               |
+| `part3.py`        | 1,378 行      | 数据生成层与训练层实现（自举数据生成、质量过滤、自举训练循环、知识蒸馏）   |
+| `part4.py`        | 1,226 行      | 评估层与多模态层实现（自动评估器、模态专用指标、多模态生成与评估）         |
+| `part5.py`        | 2,610 行      | 编排层、闭环层、管线层、移动仪表盘与全局测试套件（270 个测试用例）         |
+| `part6.py`        | 1,251 行      | 六层级递进融合决策引擎实现                                                 |
+| `part7.py`        | 2,494 行      | 安全治理 / 可观测性 / API网关 / 模型注册 / 课程训练 / 经济引擎 / 知识图谱  |
+| `part8.py`        | 2,868 行      | 联邦学习 / 模型蒸馏 / RLHF / 量化压缩 / 向量数据库 / 提示工程 / 边缘 / 记忆|
+| `part9.py`        | 2,889 行      | Transformer 模型本体: BPE 分词器 / RoPE / KV Cache / 采样器 / 训练引擎    |
+| `part10.py`       | 3,074 行      | 外部知识接入: 连接器 / 文档解析 / 爬虫 / PII 脱敏 / 版权检查 / MinHash 去重|
+| `part11.py`       | 2,304 行      | 推理服务: 引擎 / 连续批处理 / 流式输出 / 推理缓存 / Function Calling       |
+| `part12.py`       | 3,919 行      | 模型格式: Safetensors / HuggingFace 导出 / ONNX / GGUF / 外部模型导入     |
+| `part13.py`       | 3,143 行      | 微调: LoRA / 全参数 / SFT / DPO / 持续学习 / 领域适配                      |
+| `part14.py`       | 2,535 行      | API 服务: HTTP / OpenAI 兼容 / WebSocket / gRPC / 文档 / SDK 生成         |
+| `part15.py`       | 2,490 行      | MLOps: 实验追踪 / 任务队列 / GPU 调度 / 训练监控 / 模型对比                |
+| `part16.py`       | 4,197 行      | UI+安全: Web Chat / Playground / 训练面板 / 水印 / API Key / 血缘审计     |
+| `run_tests.py`    | 65 行         | 统一测试运行器，按依赖顺序加载所有模块                                     |
+| **合计**          | **38,296 行** | **17 个文件，52 项组件，零外部依赖，270 个测试**                           |
 
 ## 快速开始
 
@@ -107,7 +183,7 @@ git clone https://github.com/qingluan-studio/lingyuan.git
 cd lingyuan
 
 # 2. 运行测试套件
-python lingyuan_full.py test
+python run_tests.py
 ```
 
 测试通过即表示环境就绪。也可作为库引入：
@@ -121,13 +197,29 @@ orch.quick_train(generations=3)
 
 ## 测试
 
-项目内置 208 个测试用例，覆盖全部 22 层子系统，通过统一运行器执行：
+项目内置 270 个测试用例，覆盖全部 52 项核心组件与 22 层子系统，通过统一运行器执行：
 
 ```bash
 python run_tests.py
 ```
 
-该命令会按依赖顺序加载所有模块并执行完整测试套件。CI 环境同样使用此命令。
+该命令会按依赖顺序加载所有 17 个模块并执行完整测试套件。CI 环境同样使用此命令。
+
+测试覆盖范围：
+- 基础设施: Token 经济 / 能源 / 厂商调度 / 存储
+- 数据引擎: 生成 / 训练 / 蒸馏 / 评估
+- Agent 编排: 团队 / 工作流 / 空间协同
+- 融合决策: 六层级递进融合 / 熵增监测 / OOM 预测
+- 安全治理: 内容过滤 / 熔断 / 红队 / 审计
+- 模型本体: Tokenizer / Transformer / KV Cache / 训练引擎
+- 外部接入: 文档解析 / PII 脱敏 / 版权检查 / 去重
+- 推理服务: 引擎 / 缓存 / Function Calling / Chat 模板
+- 模型格式: 权重序列化 / HF 导出 / GGUF 导出
+- 微调: LoRA / SFT / DPO / 持续学习
+- API 服务: HTTP / OpenAI / WebSocket / gRPC
+- MLOps: 实验追踪 / GPU 调度 / 训练监控
+- UI+安全: Web Chat / 水印 / API Key / 血缘审计
+- 端到端集成: Token→数据→训练→评估→蒸馏→健康检查
 
 ## 持续集成
 
@@ -135,7 +227,7 @@ python run_tests.py
 
 - **触发条件**：向 `main` 分支推送，或针对 `main` 发起 Pull Request
 - **运行环境**：Ubuntu + Python 3.11
-- **流程**：检出代码 → 配置 Python 3.11 → 安装依赖 → 运行 `python lingyuan_full.py test`
+- **流程**：检出代码 → 配置 Python 3.11 → 安装依赖 → 运行 `python run_tests.py`
 - **产物**：测试过程中的运行时数据与日志将作为 Artifact 上传，便于排查
 
 ## 环境要求
@@ -149,7 +241,7 @@ python run_tests.py
 
 欢迎通过 Pull Request 贡献代码。提交前请确保：
 
-1. `python lingyuan_full.py test` 全部通过
+1. `python run_tests.py` 全部通过（270/270）
 2. 新增能力配备相应测试
 3. 遵循现有代码风格
 
