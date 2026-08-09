@@ -735,6 +735,14 @@ class LingyuanOrchestrator:
         self._auto_ml = None
         self._inference_server = None
 
+        # ===== Part 23-28: 量化/多模态/知识图谱/自适应学习/安全/边缘 (延迟导入) =====
+        self._quantization_engine = None
+        self._multimodal_fusion = None
+        self._knowledge_graph_system = None
+        self._adaptive_learning = None
+        self._security_sandbox = None
+        self._edge_deployment = None
+
         # 注册初始模型(如果无模型)
         if len(self.data_engine.model_data.assets) == 0:
             self._register_initial_model()
@@ -840,6 +848,79 @@ class LingyuanOrchestrator:
             except Exception:
                 pass
         return self._inference_server
+
+    # ===== Part 23-28 延迟加载属性 =====
+
+    @property
+    def quantization_engine(self):
+        """量化推理引擎 (延迟初始化)"""
+        if self._quantization_engine is None:
+            try:
+                from part23 import MobileInferenceOptimizer
+                self._quantization_engine = MobileInferenceOptimizer()
+            except Exception:
+                pass
+        return self._quantization_engine
+
+    @property
+    def multimodal_fusion(self):
+        """多模态融合引擎 (延迟初始化)"""
+        if self._multimodal_fusion is None:
+            try:
+                from part24 import MultimodalFusionModel, MultimodalConfig
+                self._multimodal_fusion = MultimodalFusionModel()
+            except Exception:
+                pass
+        return self._multimodal_fusion
+
+    @property
+    def knowledge_graph_system(self):
+        """知识图谱增强系统 (延迟初始化)"""
+        if self._knowledge_graph_system is None:
+            try:
+                from part25 import RAGEngine
+                self._knowledge_graph_system = RAGEngine()
+            except Exception:
+                pass
+        return self._knowledge_graph_system
+
+    @property
+    def adaptive_learning(self):
+        """自适应学习系统 (延迟初始化)"""
+        if self._adaptive_learning is None:
+            try:
+                from part26 import AdaptiveLearningSystem, create_python_curriculum
+                self._adaptive_learning = AdaptiveLearningSystem()
+                self._adaptive_learning.build_curriculum(create_python_curriculum())
+            except Exception:
+                pass
+        return self._adaptive_learning
+
+    @property
+    def security_sandbox(self):
+        """安全沙箱系统 (延迟初始化)"""
+        if self._security_sandbox is None:
+            try:
+                from part27 import SecuritySandboxSystem
+                self._security_sandbox = SecuritySandboxSystem()
+            except Exception:
+                pass
+        return self._security_sandbox
+
+    @property
+    def edge_deployment(self):
+        """边缘部署管理器 (延迟初始化)"""
+        if self._edge_deployment is None:
+            try:
+                from part28 import EdgeDeploymentManager, create_preset_devices, create_preset_model
+                self._edge_deployment = EdgeDeploymentManager()
+                for device in create_preset_devices():
+                    self._edge_deployment.register_device(device)
+                model = create_preset_model()
+                self._edge_deployment.register_model(model)
+            except Exception:
+                pass
+        return self._edge_deployment
 
     def _register_initial_model(self):
         """注册初始基座模型"""
