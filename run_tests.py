@@ -34,6 +34,19 @@ def main():
         "part14.py",  # API服务: HTTP/OpenAI兼容/WebSocket/gRPC/文档/SDK
         "part15.py",  # MLOps: 实验追踪/任务队列/GPU调度/监控/对比
         "part16.py",  # UI+安全: WebChat/Playground/训练面板/水印/APIKey/血缘
+        "part17.py",  # 虚拟GPU
+        "part18.py",  # GPU加速训练引擎
+        "part19.py",  # MoE混合专家模型
+        "part20.py",  # 智能数据工厂
+        "part21.py",  # 自进化系统(AutoML)
+        "part22.py",  # 分布式推理引擎
+        "part23.py",  # 量化推理引擎
+        "part24.py",  # 多模态融合引擎
+        "part25.py",  # 知识图谱增强系统
+        "part26.py",  # 自适应学习系统
+        "part27.py",  # 安全沙箱与对抗防御
+        "part28.py",  # 边缘部署优化器
+        "part29.py",  # 三架构融合模型(嘴+大脑+眼)
         "part5.py",
     ]
 

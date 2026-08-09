@@ -743,6 +743,9 @@ class LingyuanOrchestrator:
         self._security_sandbox = None
         self._edge_deployment = None
 
+        # ===== Part 29: 三架构融合模型 (嘴+大脑+眼) (延迟导入) =====
+        self._tri_arch_model = None
+
         # 注册初始模型(如果无模型)
         if len(self.data_engine.model_data.assets) == 0:
             self._register_initial_model()
@@ -778,6 +781,7 @@ class LingyuanOrchestrator:
         print(f"  - API服务: HTTP/OpenAI兼容/WebSocket/gRPC")
         print(f"  - MLOps: 实验追踪/任务队列/GPU调度/监控")
         print(f"  - UI+安全: Web Chat/Playground/水印/API Key")
+        print(f"  - 三架构融合: 嘴(语言生成)+大脑(推理编程)+眼(多模态) ~1373万参数/13MB流数据")
 
     # ===== Part 17-22 延迟加载属性 =====
 
@@ -921,6 +925,30 @@ class LingyuanOrchestrator:
             except Exception:
                 pass
         return self._edge_deployment
+
+    # ===== Part 29 延迟加载属性 =====
+
+    @property
+    def tri_arch_model(self):
+        """三架构融合模型 (嘴+大脑+眼) — 灵元·三才 (延迟初始化)
+
+        教授的理念: "虚拟模型同于数据，内存同于数据，参数于数据，
+        模型大小则于可流性数据，散于数据海。"
+
+        三架构:
+            A "嘴" (Mouth)  — 语言生成: 文本表达
+            B "大脑" (Brain) — 推理编程: 逻辑推理+代码生成
+            C "眼" (Eye)    — 多模态理解: 视觉+音频编码
+
+        总参数: ~1373万 (13.73M) — 约13MB流数据, 手机可驱动
+        """
+        if self._tri_arch_model is None:
+            try:
+                from part29 import LingyuanTriArchModel, TriArchConfig
+                self._tri_arch_model = LingyuanTriArchModel()
+            except Exception:
+                pass
+        return self._tri_arch_model
 
     def _register_initial_model(self):
         """注册初始基座模型"""
