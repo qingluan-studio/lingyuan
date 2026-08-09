@@ -725,6 +725,16 @@ class LingyuanOrchestrator:
         self.api_key_mgr = APIKeyManager()
         self.provenance_auditor = DataProvenanceAuditor()
 
+        # ===== Part 17: 虚拟GPU =====
+        self.virtual_gpu = None  # 延迟初始化, 避免启动时线程池开销
+
+        # ===== Part 18-22: 大规模扩展 (延迟导入, 按需加载) =====
+        self._gpu_training_engine = None
+        self._moe_model = None
+        self._data_factory = None
+        self._auto_ml = None
+        self._inference_server = None
+
         # 注册初始模型(如果无模型)
         if len(self.data_engine.model_data.assets) == 0:
             self._register_initial_model()
@@ -760,6 +770,76 @@ class LingyuanOrchestrator:
         print(f"  - API服务: HTTP/OpenAI兼容/WebSocket/gRPC")
         print(f"  - MLOps: 实验追踪/任务队列/GPU调度/监控")
         print(f"  - UI+安全: Web Chat/Playground/水印/API Key")
+
+    # ===== Part 17-22 延迟加载属性 =====
+
+    @property
+    def gpu(self):
+        """虚拟GPU (延迟初始化)"""
+        if self.virtual_gpu is None:
+            try:
+                from part17 import VirtualGPU
+                self.virtual_gpu = VirtualGPU()
+                self.virtual_gpu.warmup()
+            except Exception:
+                pass
+        return self.virtual_gpu
+
+    @property
+    def gpu_training(self):
+        """GPU加速训练引擎 (延迟初始化)"""
+        if self._gpu_training_engine is None:
+            try:
+                from part18 import GPUAcceleratedTrainingEngine
+                self._gpu_training_engine = GPUAcceleratedTrainingEngine(self.transformer_model)
+            except Exception:
+                pass
+        return self._gpu_training_engine
+
+    @property
+    def moe(self):
+        """MoE混合专家模型 (延迟初始化)"""
+        if self._moe_model is None:
+            try:
+                from part19 import MoETransformerModel, MoEConfig
+                config = MoEConfig.from_preset("tiny_moe")
+                self._moe_model = MoETransformerModel(config)
+            except Exception:
+                pass
+        return self._moe_model
+
+    @property
+    def data_factory(self):
+        """智能数据工厂 (延迟初始化)"""
+        if self._data_factory is None:
+            try:
+                from part20 import DataPipeline, DataAugmentor, SmartBatcher
+                self._data_factory = DataPipeline()
+            except Exception:
+                pass
+        return self._data_factory
+
+    @property
+    def auto_ml(self):
+        """自进化系统 (延迟初始化)"""
+        if self._auto_ml is None:
+            try:
+                from part21 import AutoMLPipeline, NeuralArchitectureSearch
+                self._auto_ml = AutoMLPipeline()
+            except Exception:
+                pass
+        return self._auto_ml
+
+    @property
+    def inference_server(self):
+        """分布式推理引擎 (延迟初始化)"""
+        if self._inference_server is None:
+            try:
+                from part22 import InferenceServer, InferenceEngine as InfEng
+                self._inference_server = InferenceServer()
+            except Exception:
+                pass
+        return self._inference_server
 
     def _register_initial_model(self):
         """注册初始基座模型"""
