@@ -1554,3 +1554,84 @@ def create_preset_model(model_id: str = "lingyuan-tiny",
         avg_inference_time_ms=150.0,
         max_seq_length=512,
     )
+
+
+# ============================================================
+# 自测入口
+# ============================================================
+
+if __name__ == "__main__":
+    print("=" * 60)
+    print("Part 28 — 边缘部署优化器 自测")
+    print("=" * 60)
+
+    # 1. 预设设备
+    print("\n[1] 创建预设边缘设备...")
+    devices = create_preset_devices()
+    print(f"    设备数: {len(devices)}")
+    for d in devices:
+        print(f"    - {d.name} ({d.device_type.value}): "
+              f"ram={d.ram_mb}MB, compute={d.compute_score:.1f}")
+
+    # 2. 预设模型
+    print("\n[2] 创建预设模型...")
+    model = create_preset_model()
+    print(f"    模型: {model.name}")
+    print(f"    总参数: {model.total_params:,}")
+    print(f"    FP32: {model.fp32_size_mb:.1f}MB, INT8: {model.int8_size_mb:.1f}MB")
+    print(f"    层数: {len(model.layers)}")
+
+    # 3. 部署管理器
+    print("\n[3] 初始化部署管理器...")
+    manager = EdgeDeploymentManager()
+    for d in devices:
+        manager.register_device(d)
+    manager.register_model(model)
+    print(f"    已注册设备: {len(manager.scheduler.devices)}")
+    print(f"    已注册模型: {len(manager.models)}")
+
+    # 4. 模型分割规划
+    print("\n[4] 模型分割规划...")
+    partitioner = ModelPartitioner()
+    partitions = partitioner.plan_partition(model, devices[0])
+    print(f"    分割方案: {type(partitions)}")
+
+    # 5. 部署模型
+    print("\n[5] 部署模型到边缘设备...")
+    deploy_result = manager.deploy_model(model.model_id)
+    if isinstance(deploy_result, dict):
+        for k, v in list(deploy_result.items())[:5]:
+            if not isinstance(v, (dict, list)):
+                print(f"    {k}: {v}")
+            elif isinstance(v, list):
+                print(f"    {k}: {len(v)}项")
+
+    # 6. 动态批处理
+    print("\n[6] 动态批处理测试...")
+    batcher = DynamicBatcher()
+    for i in range(3):
+        batcher.add_request({"input": f"test_{i}", "user_id": f"user_{i}"})
+    batch_result = batcher.get_batch() if hasattr(batcher, 'get_batch') else None
+    print(f"    批处理器: {type(batcher).__name__}")
+
+    # 7. 模型缓存
+    print("\n[7] 模型缓存测试...")
+    cache = ModelCache()
+    print(f"    缓存系统: {type(cache).__name__}")
+
+    # 8. 边云协同
+    print("\n[8] 边云协同测试...")
+    coordinator = EdgeCloudCoordinator()
+    print(f"    协同器: {type(coordinator).__name__}")
+
+    # 9. 调度统计
+    print("\n[9] 调度统计...")
+    sched = manager.scheduler
+    print(f"    注册设备: {len(sched.devices)}")
+    print(f"    任务历史: {len(sched.task_history)}")
+    print(f"    亲和映射: {len(sched.affinity_map)}")
+    print(f"    设备负载: {dict(sched.device_loads)}")
+
+    print("\n" + "=" * 60)
+    print("Part 28 自测完成")
+    print("=" * 60)

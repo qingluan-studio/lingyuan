@@ -1540,3 +1540,65 @@ def create_python_curriculum() -> List[Dict[str, Any]]:
          "tags": ["高级", "异步"], "objectives": ["understand", "apply", "analyze", "evaluate"],
          "content_formats": ["text", "interactive", "project"]},
     ]
+
+
+# ============================================================
+# 自测入口
+# ============================================================
+
+if __name__ == "__main__":
+    print("=" * 60)
+    print("Part 26 — 自适应学习系统 自测")
+    print("=" * 60)
+
+    # 1. 构建知识空间 + 课程
+    print("\n[1] 构建Python课程知识空间...")
+    curriculum = create_python_curriculum()
+    system = AdaptiveLearningSystem()
+    n = system.build_curriculum(curriculum)
+    print(f"    知识点: {n}个, 关系: {len(system.ks.relations)}条")
+
+    # 2. 注册学习者
+    print("\n[2] 注册学习者...")
+    profile = system.register_learner("learner_001", "小明",
+                                       CognitiveStyle.VISUAL)
+    print(f"    学习者: {profile.name} ({profile.learner_id})")
+    print(f"    认知风格: {profile.cognitive_style.value}")
+
+    # 3. 初始评估
+    print("\n[3] 初始水平评估...")
+    assessments = [("py_var", 3), ("py_str", 2), ("py_func", 1)]
+    result = system.assess_initial_level("learner_001", assessments)
+    print(f"    评估结果: 掌握{len(result.get('mastered', []))}个知识点")
+    if 'initial_level' in result:
+        print(f"    初始水平: {result['initial_level']}")
+
+    # 4. 学习路径
+    print("\n[4] 生成学习路径...")
+    path = system.get_learning_path("learner_001", max_length=5)
+    print(f"    路径长度: {len(path)}步")
+    for i, step in enumerate(path[:3]):
+        print(f"    {i+1}. {step['name']} ({step['difficulty']})")
+
+    # 5. 记录学习活动
+    print("\n[5] 记录学习活动...")
+    for _ in range(3):
+        activity = system.record_activity("learner_001", "py_var",
+                                           correct=True, quality=4)
+    print(f"    活动记录: 已完成{system.total_learning_activities}次")
+
+    # 6. 推荐内容
+    print("\n[6] 内容推荐...")
+    recs = system.get_recommendations("learner_001")
+    print(f"    推荐数: {len(recs)}")
+
+    # 7. 分析报告
+    print("\n[7] 学习分析报告...")
+    report = system.get_analytics_report("learner_001")
+    if isinstance(report, dict):
+        for k, v in list(report.items())[:5]:
+            print(f"    {k}: {v}")
+
+    print("\n" + "=" * 60)
+    print("Part 26 自测完成")
+    print("=" * 60)
