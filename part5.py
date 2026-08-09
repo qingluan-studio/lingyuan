@@ -1852,13 +1852,14 @@ class LingyuanTestSuite:
                       f"实体: {len(subgraph['entities'])}, 关系: {len(subgraph['relations'])}")
 
         # 知识融合
+        unique_name = f"联邦学习新概念_{uuid.uuid4().hex[:6]}"
         fusion = kg.fuse_knowledge(
             external_entities=[
-                {"name": "联邦学习新概念XYZ", "entity_type": "technique", "description": "分布式机器学习"},
+                {"name": unique_name, "entity_type": "technique", "description": "分布式机器学习"},
                 {"name": "自举训练", "entity_type": "technique", "description": "已存在, 应合并"},
             ],
             external_relations=[
-                {"source_name": "联邦学习新概念XYZ", "target_name": "自举训练",
+                {"source_name": unique_name, "target_name": "自举训练",
                  "relation_type": "similar_to", "weight": 0.6},
             ],
         )
