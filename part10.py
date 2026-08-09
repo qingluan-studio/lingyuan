@@ -34,6 +34,7 @@ from collections import deque, Counter
 from dataclasses import dataclass, field, asdict
 from typing import Dict, List, Optional, Any, Callable, Tuple, Set
 from datetime import datetime
+from concurrent.futures import ThreadPoolExecutor, as_completed
 
 
 # ============================================================
@@ -198,14 +199,38 @@ class ExternalDataConnector:
 
     # ---------- 远程拉取 (模拟) ----------
     def fetch_github_repo(self, owner: str, repo: str, path: str = "",
-                          simulate: bool = True) -> Dict:
-        """拉取 GitHub 仓库数据 (模拟 API 调用)
+                          simulate: bool = True, use_cache: bool = True,
+                          cache_ttl: int = 3600) -> Dict:
+        """拉取 GitHub 仓库数据 (带本地缓存)
+
+        Args:
+            simulate: 模拟模式 (不真实请求 API)
+            use_cache: 是否使用本地缓存 (默认开启)
+            cache_ttl: 缓存有效期秒数 (默认 1 小时, 0=永不过期)
 
         返回包含文件清单与示例内容的结构化结果, 并落盘保存。
         """
         target = f"{owner}/{repo}" + (f"/{path}" if path else "")
         save_dir = os.path.join(self.data_dir, "github", f"{owner}_{repo}")
         os.makedirs(save_dir, exist_ok=True)
+        manifest_path = os.path.join(save_dir, "manifest.json")
+
+        # --- 本地缓存检查 ---
+        if use_cache and os.path.exists(manifest_path):
+            try:
+                with open(manifest_path, "r", encoding="utf-8") as f:
+                    cached = json.load(f)
+                cached_time = cached.get("fetched_at", "")
+                if cached_time:
+                    cached_dt = datetime.fromisoformat(cached_time)
+                    age = (datetime.now() - cached_dt).total_seconds()
+                    if cache_ttl == 0 or age < cache_ttl:
+                        # 缓存有效, 直接返回
+                        cached["cached"] = True
+                        cached["cache_age_seconds"] = int(age)
+                        return cached
+            except Exception:
+                pass  # 缓存损坏, 重新拉取
 
         files: List[Dict] = []
         if not simulate:
@@ -215,7 +240,7 @@ class ExternalDataConnector:
                 url = f"https://api.github.com/repos/{owner}/{repo}/contents/{api_path}"
                 req = urllib.request.Request(url, headers={"Accept": "application/vnd.github+json",
                                                             "User-Agent": "lingyuan-bot"})
-                with urllib.request.urlopen(req, timeout=10) as resp:
+                with urllib.request.urlopen(req, timeout=15) as resp:
                     raw = json.loads(resp.read().decode("utf-8"))
                 if isinstance(raw, list):
                     for item in raw:
@@ -241,7 +266,6 @@ class ExternalDataConnector:
             "fetched_at": datetime.now().isoformat(),
             "files": files,
         }
-        manifest_path = os.path.join(save_dir, "manifest.json")
         with open(manifest_path, "w", encoding="utf-8") as f:
             json.dump(manifest, f, ensure_ascii=False, indent=2)
 
@@ -289,19 +313,44 @@ class ExternalDataConnector:
 
     def fetch_hf_dataset(self, dataset_name: str, split: str = "train",
                          simulate: bool = True) -> Dict:
-        """下载 HuggingFace 数据集 (模拟)"""
+        """下载 HuggingFace 数据集 (模拟 / 真实)
+
+        真实模式下优先使用 HF 镜像 (hf-mirror.com) 加速国内下载。
+        """
+        # --- HF 镜像加速 ---
+        # 优先使用环境变量, 其次默认国内镜像
+        hf_endpoint = os.environ.get("HF_ENDPOINT", "https://hf-mirror.com")
+        os.environ["HF_ENDPOINT"] = hf_endpoint
+
         save_dir = os.path.join(self.data_dir, "huggingface",
                                dataset_name.replace("/", "_"))
         os.makedirs(save_dir, exist_ok=True)
 
-        # 模拟生成数据集记录
         records = []
-        for i in range(8):
-            records.append({
-                "id": i,
-                "text": f"这是来自 HuggingFace 数据集 {dataset_name} ({split}) 的第 {i} 条模拟样本。",
-                "label": i % 3,
-            })
+        if not simulate:
+            # 尝试通过 HF 镜像真实下载
+            try:
+                dataset_url = (f"{hf_endpoint}/datasets/{dataset_name}/"
+                               f"resolve/main/{split}.jsonl")
+                req = urllib.request.Request(
+                    dataset_url,
+                    headers={"User-Agent": "lingyuan-bot"})
+                with urllib.request.urlopen(req, timeout=30) as resp:
+                    raw = resp.read().decode("utf-8")
+                for line in raw.strip().split("\n"):
+                    if line.strip():
+                        records.append(json.loads(line))
+            except Exception:
+                # 镜像也失败, 回退模拟
+                records = []
+        if not records:
+            # 模拟生成数据集记录
+            for i in range(8):
+                records.append({
+                    "id": i,
+                    "text": f"这是来自 HuggingFace 数据集 {dataset_name} ({split}) 的第 {i} 条模拟样本。",
+                    "label": i % 3,
+                })
         data_path = os.path.join(save_dir, f"{split}.jsonl")
         with open(data_path, "w", encoding="utf-8") as f:
             for r in records:
@@ -1280,14 +1329,78 @@ class WebCrawler:
         return m.group(1).strip() if m else ""
 
     # ---------- BFS 爬取 ----------
-    def crawl(self, url: str, max_depth: int = 2, max_pages: int = 50) -> List[CrawledPage]:
-        """BFS 爬取
+    def crawl(self, url: str, max_depth: int = 2, max_pages: int = 50,
+              max_workers: int = 4) -> List[CrawledPage]:
+        """BFS 爬取 (并发版)
 
         Args:
             url: 种子 URL
             max_depth: 最大爬取深度
             max_pages: 最大页面数
+            max_workers: 并发线程数 (默认4, 0=串行)
         """
+        seed_parsed = urllib.parse.urlparse(url)
+        seed_domain = seed_parsed.netloc
+        results: List[CrawledPage] = []
+        queue: deque = deque([(url, 0)])
+
+        # --- 串行模式 (兼容 max_workers=0 或 max_pages<=1) ---
+        if max_workers <= 0 or max_pages <= 1:
+            return self._crawl_serial(url, max_depth, max_pages)
+
+        # --- 并发模式 ---
+        while queue and len(results) < max_pages:
+            # 从队列中取出一批 URL (同一深度)
+            batch_urls: List[Tuple[str, int]] = []
+            batch_capacity = min(max_workers, max_pages - len(results))
+            while queue and len(batch_urls) < batch_capacity:
+                current_url, depth = queue.popleft()
+                if depth > max_depth:
+                    continue
+                if not self.should_visit(current_url, seed_domain):
+                    continue
+                if not self.check_robots(current_url):
+                    continue
+                batch_urls.append((current_url, depth))
+
+            if not batch_urls:
+                continue
+
+            # 并发抓取本批
+            crawl_delay = self.robots_cache.get(
+                f"{seed_parsed.scheme}://{seed_parsed.netloc}", {}).get("crawl_delay", self.delay)
+
+            with ThreadPoolExecutor(max_workers=max_workers) as pool:
+                future_map = {
+                    pool.submit(self.fetch_page, u, d): (u, d)
+                    for u, d in batch_urls
+                }
+                for future in as_completed(future_map):
+                    if len(results) >= max_pages:
+                        break
+                    u, d = future_map[future]
+                    try:
+                        page = future.result()
+                    except Exception:
+                        page = None
+                    if page:
+                        results.append(page)
+                        # 入队新链接
+                        if d < max_depth:
+                            for link in page.links:
+                                if len(results) + len(queue) >= max_pages:
+                                    break
+                                if self.should_visit(link, seed_domain):
+                                    queue.append((link, d + 1))
+
+            # 批次间遵守 crawl-delay
+            if crawl_delay:
+                time.sleep(min(crawl_delay, self.delay))
+        return results
+
+    def _crawl_serial(self, url: str, max_depth: int = 2,
+                      max_pages: int = 50) -> List[CrawledPage]:
+        """串行 BFS 爬取 (兼容旧版)"""
         seed_parsed = urllib.parse.urlparse(url)
         seed_domain = seed_parsed.netloc
         results: List[CrawledPage] = []
@@ -3057,8 +3170,54 @@ class ExternalTeacherDistiller:
         return text, ""
 
     def _simulate_response(self, prompt: str) -> str:
-        """生成模拟教师回答 (模拟模式)"""
-        # 根据 prompt 生成结构化、有信息量的模拟回答
+        """生成模拟教师回答 (模拟模式)
+
+        支持两种模拟策略:
+        1. 本地 mock 模式: 使用灵元 Transformer 生成回答 (如果模型可用)
+        2. 规则模拟: 根据 prompt 生成结构化回答 (回退方案)
+        """
+        # --- 尝试本地 mock 模式 (用内部 Transformer 生成) ---
+        mock_model = getattr(self, "_mock_model", None)
+        mock_tokenizer = getattr(self, "_mock_tokenizer", None)
+        if mock_model is not None and mock_tokenizer is not None:
+            try:
+                ids = mock_tokenizer.encode(prompt[:256], add_bos=True)
+                if len(ids) > 2:
+                    logits = mock_model.forward(ids, training=False)
+                    # 取最后一个位置的 logits, greedy 解码
+                    last_logits = logits[-1] if logits else []
+                    if last_logits:
+                        # 取 top-k token (避免 <pad>)
+                        top_k = sorted(range(len(last_logits)),
+                                      key=lambda i: last_logits[i],
+                                      reverse=True)[:10]
+                        # 跳过特殊 token (前4个: pad/bos/eos/unk)
+                        next_token = top_k[0] if top_k[0] >= 4 else (top_k[1] if len(top_k) > 1 else top_k[0])
+                        generated = [next_token]
+                        # 简单生成 3-5 个 token
+                        for _ in range(min(5, 20)):
+                            cur_ids = ids + generated
+                            lg = mock_model.forward(cur_ids, training=False)
+                            last_lg = lg[-1] if lg else []
+                            if not last_lg:
+                                break
+                            tk = sorted(range(len(last_lg)),
+                                       key=lambda i: last_lg[i],
+                                       reverse=True)[:5]
+                            nt = tk[0] if tk[0] >= 4 else (tk[1] if len(tk) > 1 else tk[0])
+                            if nt == mock_tokenizer.eos_id:
+                                break
+                            generated.append(nt)
+                        gen_text = mock_tokenizer.decode(generated, skip_special=True)
+                        if gen_text.strip():
+                            return (f"【本地Mock模型回答】\n"
+                                    f"问题: {prompt[:80]}\n"
+                                    f"生成: {gen_text}\n"
+                                    f"(基于灵元Transformer本地推理, 非真实API)")
+            except Exception:
+                pass  # mock 模型失败, 回退规则模拟
+
+        # --- 规则模拟 (回退方案) ---
         prompt_preview = prompt.strip()[:80]
         responses = [
             f"作为教师模型, 针对问题「{prompt_preview}」给出如下分析:\n"
@@ -3074,6 +3233,40 @@ class ExternalTeacherDistiller:
             f"该回答仅用于蒸馏训练数据生成, 非真实 API 输出。",
         ]
         return random.choice(responses)
+
+    def enable_local_mock(self, model=None, tokenizer=None) -> bool:
+        """启用本地 mock 模式
+
+        传入灵元 Transformer 模型和 BPE 分词器,
+        模拟模式下会用本地模型生成回答而非规则模拟。
+
+        Args:
+            model: LingyuanTransformerModel 实例 (可选, 自动创建 tiny)
+            tokenizer: BPETokenizer 实例 (可选, 自动创建)
+        Returns:
+            是否成功启用
+        """
+        try:
+            if model is None:
+                ModelConfigCls = globals().get("ModelConfig")
+                ModelCls = globals().get("LingyuanTransformerModel")
+                if ModelConfigCls and ModelCls:
+                    config = ModelConfigCls.from_preset("tiny")
+                    model = ModelCls(config)
+                else:
+                    return False
+            if tokenizer is None:
+                TokenizerCls = globals().get("BPETokenizer")
+                if TokenizerCls:
+                    tokenizer = TokenizerCls()
+                else:
+                    return False
+            self._mock_model = model
+            self._mock_tokenizer = tokenizer
+            self.config.simulate = True
+            return True
+        except Exception:
+            return False
 
     # ---------- 质量过滤 ----------
     def _quality_filter(self, sample: DistillSample, min_length: int = 20,
