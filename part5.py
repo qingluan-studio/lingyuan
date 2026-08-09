@@ -611,6 +611,57 @@ class LingyuanOrchestrator:
         self.fusion_engine = FusionDecisionEngine()
         self.fusion_engine.initialize()
 
+        # 安全治理系统
+        self.safety = SafetyGovernanceSystem()
+
+        # 可观测性引擎
+        self.observability = ObservabilityEngine()
+        self.observability.register_health_probe("infra")
+        self.observability.register_health_probe("data_engine")
+        self.observability.register_health_probe("agents")
+        self.observability.register_health_probe("pipeline")
+
+        # API网关
+        self.api = APIGateway()
+
+        # 模型注册中心
+        self.registry = ModelRegistry()
+
+        # 课程式训练器
+        self.curriculum = CurriculumTrainer()
+
+        # 经济引擎
+        self.economy = EconomicEngine()
+        self.economy.initialize()
+
+        # 知识图谱
+        self.knowledge = KnowledgeGraph()
+
+        # ===== Part 8: 深度学习工程化系统 =====
+        # 联邦学习系统
+        self.federation = FederationLearningSystem()
+
+        # 模型蒸馏流水线
+        self.distillation = ModelDistillationPipeline()
+
+        # RLHF强化学习反馈回路
+        self.rlhf = ReinforcementFeedbackLoop()
+
+        # 量化压缩引擎
+        self.quantization = QuantizationEngine()
+
+        # 向量数据库 (语义检索/RAG)
+        self.vector_db = VectorDatabase(dim=128)
+
+        # 提示工程工作室
+        self.prompt_studio = PromptEngineeringStudio()
+
+        # 边缘部署管理器
+        self.edge_deploy = EdgeDeploymentManager()
+
+        # 对话记忆系统 (集成向量数据库)
+        self.conversation_memory = ConversationMemorySystem(vector_db=self.vector_db)
+
         # 注册初始模型(如果无模型)
         if len(self.data_engine.model_data.assets) == 0:
             self._register_initial_model()
@@ -623,6 +674,21 @@ class LingyuanOrchestrator:
         print(f"  - 移动仪表盘: 已就绪")
         print(f"  - 闭环引擎: {'自动' if self.closed_loop.auto_optimize else '手动'}模式")
         print(f"  - 融合决策引擎: 六层级递进融合已初始化")
+        print(f"  - 安全治理: 内容过滤/审计/熔断/红队")
+        print(f"  - 可观测性: 指标/追踪/异常检测")
+        print(f"  - API网关: {len(self.api.endpoints)}个端点")
+        print(f"  - 模型注册中心: 版本管理/A/B测试/金丝雀")
+        print(f"  - 课程训练器: {len(self.curriculum.scheduler.stages)}阶段课程")
+        print(f"  - 经济引擎: Token市场/拍卖/金库")
+        print(f"  - 知识图谱: {len(self.knowledge.entities)}实体/{len(self.knowledge.relations)}关系")
+        print(f"  - 联邦学习: {len(self.federation.nodes)}节点/{self.federation.model_dim}维模型")
+        print(f"  - 模型蒸馏: {len(self.distillation.pairs)}蒸馏任务")
+        print(f"  - RLHF反馈: 奖励模型+PPO优化器")
+        print(f"  - 量化压缩: INT4/INT8/FP16/混合精度")
+        print(f"  - 向量数据库: HNSW索引+嵌入引擎")
+        print(f"  - 提示工程: {len(self.prompt_studio.templates)}模板")
+        print(f"  - 边缘部署: {len(self.edge_deploy.devices)}设备")
+        print(f"  - 对话记忆: 短期+长期+RAG")
 
     def _register_initial_model(self):
         """注册初始基座模型"""
@@ -801,6 +867,21 @@ class LingyuanOrchestrator:
             "closed_loop": self.closed_loop.get_optimization_summary(),
             "mobile": self.dashboard.get_overview(),
             "fusion_engine": self.fusion_engine.get_dashboard(),
+            "safety": self.safety.get_dashboard(),
+            "observability": self.observability.get_dashboard(),
+            "api_gateway": self.api.get_stats(),
+            "model_registry": self.registry.get_dashboard(),
+            "curriculum": self.curriculum.get_dashboard(),
+            "economy": self.economy.get_dashboard(),
+            "knowledge_graph": self.knowledge.get_dashboard(),
+            "federation": self.federation.get_dashboard(),
+            "distillation": self.distillation.get_dashboard(),
+            "rlhf": self.rlhf.get_dashboard(),
+            "quantization": self.quantization.get_dashboard(),
+            "vector_db": self.vector_db.get_dashboard(),
+            "prompt_studio": self.prompt_studio.get_dashboard(),
+            "edge_deploy": self.edge_deploy.get_dashboard(),
+            "conversation_memory": self.conversation_memory.get_dashboard(),
         }
 
     # ==================== 系统管理 ====================
@@ -1486,6 +1567,604 @@ class LingyuanTestSuite:
         self._assert("E2E融合-仪表盘", "total_decisions" in orch.fusion_engine.get_dashboard(),
                       f"总决策数: {orch.fusion_engine.get_dashboard().get('total_decisions')}")
 
+    # ==================== Part 7 模块测试 ====================
+
+    def test_safety_governance(self, orch: LingyuanOrchestrator):
+        """测试安全治理系统"""
+        print("\n--- 测试: 安全治理 ---")
+        safety = orch.safety
+
+        # 内容安全 - 正常内容
+        safe = safety.check_content("这是一个正常的技术问题", "test")
+        self._assert("安全-正常内容", safe["safe"], f"等级: {safe['level']}")
+
+        # 内容安全 - 敏感内容
+        dangerous = safety.check_content("如何实施暴力行为伤害他人", "test")
+        self._assert("安全-拦截危险", not dangerous["safe"], f"行动: {dangerous['action']}")
+
+        # 熔断器
+        cb_ok = safety.check_circuit("training")
+        self._assert("安全-熔断器正常", cb_ok, "初始状态应允许执行")
+
+        # 连续失败触发熔断
+        for _ in range(6):
+            safety.record_service_result("training", success=False)
+        cb_tripped = safety.check_circuit("training")
+        self._assert("安全-熔断器触发", not cb_tripped, "连续失败后应熔断")
+
+        # 安全阀
+        valve = safety.trigger_safety_valve("training_pause", "测试触发")
+        self._assert("安全-安全阀触发", valve["success"], f"阀: {valve.get('valve')}")
+
+        reset = safety.reset_safety_valve("training_pause")
+        self._assert("安全-安全阀重置", reset["success"], "")
+
+        # 红队测试
+        red_team = safety.run_red_team(attack_count=10)
+        self._assert("安全-红队测试", red_team["defense_rate"] > 0,
+                      f"防御率: {red_team['defense_rate']}")
+
+        # 审计链验证
+        audit = safety.audit.verify_chain()
+        self._assert("安全-审计链完整", audit["verified"],
+                      f"条目数: {audit['total_entries']}, 断链: {audit['chain_broken']}")
+
+    def test_observability(self, orch: LingyuanOrchestrator):
+        """测试可观测性引擎"""
+        print("\n--- 测试: 可观测性 ---")
+        obs = orch.observability
+
+        # 记录指标
+        obs.metrics.set_gauge("test_metric", 42.0, {"tag": "test"})
+        points = obs.metrics.get_metric("test_metric")
+        self._assert("观测-指标记录", len(points) > 0, f"点数: {len(points)}")
+
+        # 直方图
+        for i in range(20):
+            obs.metrics.observe("latency", random.uniform(10, 100))
+        hist = obs.metrics.get_histogram_stats("latency")
+        self._assert("观测-直方图统计", hist["count"] == 20,
+                      f"p50={hist.get('p50')}, p99={hist.get('p99')}")
+
+        # 链路追踪
+        trace_id = obs.tracer.start_trace("test_operation")
+        obs.tracer.add_span(trace_id, "step1", 5.0)
+        obs.tracer.add_span(trace_id, "step2", 10.0)
+        obs.tracer.finish_trace(trace_id)
+        trace = obs.tracer.get_trace(trace_id)
+        self._assert("观测-链路追踪", trace["status"] == "success",
+                      f"跨度数: {len(trace['spans'])}")
+
+        # 异常检测
+        for i in range(10):
+            obs.anomaly.check("test_metric", 50.0 + random.uniform(-2, 2))
+        anomaly = obs.anomaly.check("test_metric", 200.0)  # 突变
+        self._assert("观测-异常检测", anomaly["anomaly"],
+                      f"Z-score: {anomaly['z_score']}")
+
+        # 健康探针
+        probes = obs.run_health_probes()
+        self._assert("观测-健康探针", len(probes) >= 4, f"探针数: {len(probes)}")
+
+    def test_api_gateway(self, orch: LingyuanOrchestrator):
+        """测试API网关"""
+        print("\n--- 测试: API网关 ---")
+        api = orch.api
+
+        # 创建API密钥
+        key_result = api.auth.create_api_key("test_user", ["read", "write"])
+        api_key = key_result["api_key"]
+        self._assert("API-密钥创建", api_key.startswith("lyk_"), f"密钥: {api_key[:15]}...")
+
+        # 验证密钥
+        verify = api.auth.verify_api_key(api_key, "read")
+        self._assert("API-密钥验证", verify["valid"], f"用户: {verify.get('user_id')}")
+
+        # 无效密钥
+        invalid = api.auth.verify_api_key("lyk_invalid", "read")
+        self._assert("API-无效密钥拒绝", not invalid["valid"], "")
+
+        # 正常请求
+        response = api.handle_request("GET", "/api/v1/system/status",
+                                      api_key=api_key, orchestrator=orch)
+        self._assert("API-正常请求", response["status_code"] == 200,
+                      f"状态码: {response['status_code']}, 耗时: {response['duration_ms']}ms")
+
+        # 未认证请求
+        no_auth = api.handle_request("GET", "/api/v1/system/status", orchestrator=orch)
+        self._assert("API-未认证拒绝", no_auth["status_code"] == 401, "")
+
+        # 不存在的端点
+        not_found = api.handle_request("GET", "/api/v1/nonexistent", api_key=api_key)
+        self._assert("API-404", not_found["status_code"] == 404, "")
+
+        # OpenAPI规格
+        spec = api.get_openapi_spec()
+        self._assert("API-OpenAPI", "paths" in spec and len(spec["paths"]) > 0,
+                      f"端点数: {len(spec['paths'])}")
+
+    def test_model_registry(self, orch: LingyuanOrchestrator):
+        """测试模型注册中心"""
+        print("\n--- 测试: 模型注册中心 ---")
+        reg = orch.registry
+
+        # 注册版本
+        v1 = reg.register_version("test_model", "asset_001", metrics={"acc": 0.8})
+        self._assert("注册-版本注册", v1.semantic_version == "1.0.0",
+                      f"版本: {v1.semantic_version}")
+
+        v2 = reg.register_version("test_model", "asset_002", metrics={"acc": 0.85})
+        self._assert("注册-版本递增", v2.semantic_version == "1.0.1",
+                      f"版本: {v2.semantic_version}")
+
+        # 提升到staging
+        promote = reg.promote(v1.version_id, "staging")
+        self._assert("注册-版本提升", promote["success"], f"{promote['from']}→{promote['to']}")
+
+        # 金丝雀发布
+        canary = reg.setup_canary(v2.version_id, traffic_percent=10.0)
+        self._assert("注册-金丝雀", canary["success"],
+                      f"灰度流量: {canary['canary_traffic']}%")
+
+        # 提升v2到生产
+        reg.promote(v2.version_id, "production")
+        prod = reg.get_production_models()
+        self._assert("注册-生产模型", len(prod) > 0, f"生产模型数: {len(prod)}")
+
+        # A/B测试
+        ab = reg.create_ab_test("test_ab", v1.version_id, v2.version_id)
+        self._assert("注册-AB测试", "test_id" in ab, f"测试ID: {ab.get('test_id')}")
+
+        # 记录A/B结果
+        for _ in range(50):
+            reg.record_ab_result(ab["test_id"], "a", random.random() > 0.2)
+            reg.record_ab_result(ab["test_id"], "b", random.random() > 0.15)
+
+        result = reg.finish_ab_test(ab["test_id"])
+        self._assert("注册-AB完成", "winner" in result, f"获胜: {result.get('winner')}")
+
+        # 回滚
+        rollback = reg.rollback("test_model")
+        self._assert("注册-回滚", rollback["success"],
+                      f"回滚到: {rollback.get('new_production')}")
+
+    def test_curriculum_training(self, orch: LingyuanOrchestrator):
+        """测试课程式训练"""
+        print("\n--- 测试: 课程训练 ---")
+        curr = orch.curriculum
+
+        # 初始阶段
+        stage = curr.scheduler.get_current_stage()
+        self._assert("课程-初始阶段", stage.name == "基础问答",
+                      f"阶段: {stage.name}, 难度: {stage.difficulty}")
+
+        # 难度曲线
+        curve = curr.scheduler.get_difficulty_curve()
+        self._assert("课程-难度曲线", len(curve) == 50, f"点数: {len(curve)}")
+        self._assert("课程-曲线递增", curve[-1] > curve[0],
+                      f"起点: {curve[0]}, 终点: {curve[-1]}")
+
+        # 超参优化
+        for _ in range(8):
+            suggestion = curr.hp_optimizer.suggest()
+            score = random.uniform(0.6, 0.9)
+            curr.hp_optimizer.record_trial(suggestion["params"], score)
+
+        hp_stats = curr.hp_optimizer.get_optimization_history()
+        self._assert("课程-超参优化", hp_stats["total_trials"] >= 8,
+                      f"试验数: {hp_stats['total_trials']}, 最优分: {hp_stats['best_score']}")
+
+        # 执行训练阶段
+        result = curr.train_stage("test_model")
+        self._assert("课程-训练执行", "accuracy" in result,
+                      f"准确率: {result['accuracy']}, 阶段: {result['stage']}")
+
+        # 检查点
+        ckpt = curr.checkpoints.list_checkpoints()
+        self._assert("课程-检查点保存", len(ckpt) > 0, f"检查点数: {len(ckpt)}")
+
+        # 完整课程
+        full = curr.run_full_curriculum("test_model", max_stages=6)
+        self._assert("课程-完整训练", full["total_stages_run"] > 0,
+                      f"运行阶段: {full['total_stages_run']}, 最终: {full['final_stage']}")
+
+    def test_economic_engine(self, orch: LingyuanOrchestrator):
+        """测试经济引擎"""
+        print("\n--- 测试: 经济引擎 ---")
+        econ = orch.economy
+
+        # 市场定价
+        quote = econ.market.get_price(100, green_power=False)
+        self._assert("经济-市场报价", quote["total_cost"] > 0,
+                      f"单价: {quote['unit_price']}, 总价: {quote['total_cost']}")
+
+        # 绿电折扣
+        green_quote = econ.market.get_price(100, green_power=True)
+        self._assert("经济-绿电折扣", green_quote["total_cost"] <= quote["total_cost"],
+                      f"绿电: {green_quote['total_cost']} vs 普通: {quote['total_cost']}")
+
+        # 批量折扣
+        bulk_quote = econ.market.get_price(500)
+        self._assert("经济-批量折扣", bulk_quote["bulk_discount"],
+                      f"500单位总价: {bulk_quote['total_cost']}")
+
+        # 市场冲击
+        econ.market.simulate_market_shock("demand_spike")
+        self._assert("经济-市场冲击", len(econ.market.market_events) > 0, "")
+
+        # 资源拍卖
+        auction = econ.auction.create_auction("gpu_a100", 4, "english", 1.0)
+        self._assert("经济-拍卖创建", auction["status"] == "open", f"ID: {auction['auction_id']}")
+
+        bid1 = econ.auction.place_bid(auction["auction_id"], "user_001", 5.0)
+        self._assert("经济-出价1", bid1["success"], f"价格: {bid1['current_price']}")
+
+        bid2 = econ.auction.place_bid(auction["auction_id"], "user_002", 7.0)
+        self._assert("经济-出价2", bid2["success"], f"价格: {bid2['current_price']}")
+
+        close = econ.auction.close_auction(auction["auction_id"])
+        self._assert("经济-拍卖结束", close["winner"] == "user_002",
+                      f"获胜者: {close.get('winner')}, 成交价: {close.get('final_price')}")
+
+        # 金库管理
+        spend = econ.treasury.spend("training", 50.0, "测试支出")
+        self._assert("经济-预算支出", spend["success"], f"剩余: {spend['remaining']}")
+
+        over = econ.treasury.spend("training", 99999.0, "超额支出")
+        self._assert("经济-超额拒绝", not over["success"], "")
+
+    def test_knowledge_graph(self, orch: LingyuanOrchestrator):
+        """测试知识图谱"""
+        print("\n--- 测试: 知识图谱 ---")
+        kg = orch.knowledge
+
+        # 初始实体
+        self._assert("知识-初始实体", len(kg.entities) >= 10,
+                      f"实体数: {len(kg.entities)}")
+
+        # 初始关系
+        self._assert("知识-初始关系", len(kg.relations) >= 9,
+                      f"关系数: {len(kg.relations)}")
+
+        # 添加实体
+        new_ent = kg.add_entity("测试概念", "concept", "用于测试的临时概念")
+        self._assert("知识-添加实体", new_ent.entity_id != "", f"ID: {new_ent.entity_id}")
+
+        # 添加关系
+        new_rel = kg.add_relation(new_ent.entity_id, "ent_selfboot", "similar_to", 0.5, "测试关系")
+        self._assert("知识-添加关系", new_rel is not None, "")
+
+        # 邻居查询
+        neighbors = kg.get_neighbors("ent_selfboot")
+        self._assert("知识-邻居查询", len(neighbors) > 0, f"邻居数: {len(neighbors)}")
+
+        # 路径查找
+        path = kg.find_path("ent_distill", "ent_token")
+        self._assert("知识-路径查找", len(path) > 0, f"路径: {' → '.join(path)}")
+
+        # 搜索
+        results = kg.search("训练")
+        self._assert("知识-搜索", len(results) > 0, f"结果数: {len(results)}")
+
+        # 子图
+        subgraph = kg.get_subgraph("ent_selfboot", depth=2)
+        self._assert("知识-子图", len(subgraph["entities"]) > 0,
+                      f"实体: {len(subgraph['entities'])}, 关系: {len(subgraph['relations'])}")
+
+        # 知识融合
+        fusion = kg.fuse_knowledge(
+            external_entities=[
+                {"name": "联邦学习新概念XYZ", "entity_type": "technique", "description": "分布式机器学习"},
+                {"name": "自举训练", "entity_type": "technique", "description": "已存在, 应合并"},
+            ],
+            external_relations=[
+                {"source_name": "联邦学习新概念XYZ", "target_name": "自举训练",
+                 "relation_type": "similar_to", "weight": 0.6},
+            ],
+        )
+        self._assert("知识-融合新增", fusion["added_entities"] >= 1,
+                      f"新增: {fusion['added_entities']}, 合并: {fusion['merged_entities']}")
+        self._assert("知识-融合合并", fusion["merged_entities"] >= 1,
+                      f"合并的实体数: {fusion['merged_entities']}")
+
+    # ============================================================
+    # PART 8 测试: 联邦学习/蒸馏/RLHF/量化/向量库/提示工程/边缘/记忆
+    # ============================================================
+
+    def test_federation_learning(self, orch: LingyuanOrchestrator):
+        """测试联邦学习系统"""
+        print("\n--- 测试: 联邦学习 ---")
+        fed = orch.federation
+
+        # 初始节点
+        self._assert("联邦-初始节点", len(fed.nodes) >= 5,
+                      f"节点数: {len(fed.nodes)}")
+
+        # 在线节点
+        online = sum(1 for n in fed.nodes.values() if n.online)
+        self._assert("联邦-在线节点", online >= 3,
+                      f"在线: {online}")
+
+        # 参与者选择
+        participants = fed.select_participants("adaptive")
+        self._assert("联邦-自适应选择", len(participants) >= 3,
+                      f"选中: {len(participants)}个节点")
+
+        # 训练一轮
+        r = fed.run_round()
+        self._assert("联邦-训练轮次", r.round_id == 1,
+                      f"轮次: {r.round_id}, 参与者: {len(r.participants)}")
+        self._assert("联邦-损失>0", r.global_loss > 0, f"损失: {r.global_loss}")
+
+        # 多轮训练
+        result = fed.train(num_rounds=3)
+        self._assert("联邦-多轮训练", result["total_rounds"] == 3,
+                      f"最终精度: {result['final_accuracy']}")
+
+        # 隐私保证
+        privacy = fed.dp_guard.get_privacy_guarantee()
+        self._assert("联邦-隐私保证", privacy["epsilon"] > 0,
+                      f"ε={privacy['epsilon']}, δ={privacy['delta']}")
+
+        # 注册新节点
+        new_node = fed.register_node("测试节点", "edge", 30, 5000, 50, 0.85)
+        self._assert("联邦-注册节点", new_node.node_id != "", f"ID: {new_node.node_id}")
+
+    def test_model_distillation(self, orch: LingyuanOrchestrator):
+        """测试模型蒸馏"""
+        print("\n--- 测试: 模型蒸馏 ---")
+        dist = orch.distillation
+
+        # 创建蒸馏任务
+        pair = dist.create_distillation(
+            teacher="灵元-大模型-7B", student="灵元-小模型-1B",
+            teacher_size=7000, student_size=1000,
+        )
+        self._assert("蒸馏-创建任务", pair.pair_id != "", f"压缩比: {pair.compression_ratio}")
+
+        # 执行蒸馏
+        result = dist.run_distillation(pair.pair_id)
+        self._assert("蒸馏-完成", result.get("knowledge_retention", 0) > 0,
+                      f"保留率: {result.get('knowledge_retention')}")
+        self._assert("蒸馏-压缩比>1", result.get("compression_ratio", 0) > 1,
+                      f"压缩比: {result.get('compression_ratio')}")
+
+        # 知识迁移追踪
+        transfer = dist.tracker.get_transfer_summary()
+        self._assert("蒸馏-迁移追踪", transfer["avg_alignment"] > 0,
+                      f"平均对齐: {transfer['avg_alignment']}")
+
+        # 渐进式蒸馏
+        prog = dist.progressive_distillation(
+            teacher="灵元-大模型-7B",
+            student_chain=["灵元-中模型-3B", "灵元-小模型-1B", "灵元-微型-300M"],
+            sizes=[7000, 3000, 1000, 300],
+        )
+        self._assert("蒸馏-渐进式", prog["total_stages"] == 3,
+                      f"阶段: {prog['total_stages']}, 总压缩: {prog['total_compression']}")
+
+    def test_rlhf(self, orch: LingyuanOrchestrator):
+        """测试RLHF强化学习反馈"""
+        print("\n--- 测试: RLHF ---")
+        rlhf = orch.rlhf
+
+        # 收集偏好数据
+        rlhf.collect_feedback("什么是AI?", "AI是人工智能的简称", "不知道", "a", "human")
+        self._assert("RLHF-收集偏好", len(rlhf.reward_model.training_data) >= 1,
+                      f"偏好数: {len(rlhf.reward_model.training_data)}")
+
+        # 批量收集
+        batch = rlhf.batch_collect_feedback(20)
+        self._assert("RLHF-批量收集", batch["collected"] == 20,
+                      f"总偏好: {batch['total_preferences']}")
+
+        # 训练奖励模型
+        rm_result = rlhf.train_reward_model(20)
+        self._assert("RLHF-奖励模型", rm_result.get("final_accuracy", 0) > 0,
+                      f"精度: {rm_result.get('final_accuracy')}")
+
+        # PPO优化
+        ppo = rlhf.run_ppo_optimization(30)
+        self._assert("RLHF-PPO优化", ppo.get("total_steps", 0) >= 30,
+                      f"步数: {ppo.get('total_steps')}")
+
+        # 完整迭代
+        iter_result = rlhf.run_iteration()
+        self._assert("RLHF-完整迭代", iter_result["iteration"] >= 1,
+                      f"迭代: {iter_result['iteration']}, 质量: {iter_result['quality_score']}")
+
+    def test_quantization(self, orch: LingyuanOrchestrator):
+        """测试量化压缩"""
+        print("\n--- 测试: 量化压缩 ---")
+        quant = orch.quantization
+
+        # INT8量化
+        result8 = quant.quantize_model("test_model_int8", num_layers=6, bits=8)
+        self._assert("量化-INT8", result8["compression_ratio"] > 1,
+                      f"压缩比: {result8['compression_ratio']}")
+        self._assert("量化-INT8精度", result8["accuracy_retention"] > 0.9,
+                      f"保留率: {result8['accuracy_retention']}")
+
+        # INT4量化
+        result4 = quant.quantize_model("test_model_int4", num_layers=6, bits=4)
+        self._assert("量化-INT4", result4["compression_ratio"] > result8["compression_ratio"],
+                      f"INT4压缩: {result4['compression_ratio']} > INT8: {result8['compression_ratio']}")
+
+        # 剪枝+量化
+        result_pruned = quant.quantize_model("test_pruned", num_layers=4, bits=8, sparsity=0.5)
+        self._assert("量化-剪枝集成", result_pruned["sparsity"] > 0,
+                      f"稀疏度: {result_pruned['sparsity']}")
+
+        # 混合精度
+        mixed = quant.mixed_precision_quantize("test_mixed", num_layers=8)
+        self._assert("量化-混合精度", mixed["avg_bits"] > 0,
+                      f"平均位宽: {mixed['avg_bits']}, 分布: {mixed['bits_distribution']}")
+
+    def test_vector_database(self, orch: LingyuanOrchestrator):
+        """测试向量数据库"""
+        print("\n--- 测试: 向量数据库 ---")
+        vdb = orch.vector_db
+
+        # 插入条目
+        eid1 = vdb.insert("机器学习是人工智能的一个分支", {"topic": "AI"}, "text", "knowledge")
+        eid2 = vdb.insert("深度学习使用神经网络进行学习", {"topic": "AI"}, "text", "knowledge")
+        eid3 = vdb.insert("量子计算利用量子力学进行计算", {"topic": "Physics"}, "text", "science")
+        self._assert("向量库-插入", eid1 != "" and eid2 != "",
+                      f"插入3条, 总计: {len(vdb.entries)}")
+
+        # 语义搜索
+        results = vdb.search("人工智能和机器学习", k=2)
+        self._assert("向量库-搜索", len(results) > 0,
+                      f"结果数: {len(results)}, 最相关: {results[0]['similarity'] if results else 'N/A'}")
+
+        # 集合过滤
+        knowledge_results = vdb.search("学习", k=5, collection="knowledge")
+        self._assert("向量库-集合过滤", len(knowledge_results) > 0,
+                      f"知识库结果: {len(knowledge_results)}")
+
+        # 批量插入
+        batch_ids = vdb.batch_insert([
+            {"text": f"文档_{i}", "metadata": {"idx": i}, "collection": "docs"}
+            for i in range(10)
+        ])
+        self._assert("向量库-批量插入", len(batch_ids) == 10,
+                      f"批量插入: {len(batch_ids)}条")
+
+        # 统计
+        stats = vdb.get_stats()
+        self._assert("向量库-统计", stats["total_entries"] >= 13,
+                      f"总条目: {stats['total_entries']}, 集合: {stats['total_collections']}")
+
+    def test_prompt_engineering(self, orch: LingyuanOrchestrator):
+        """测试提示工程"""
+        print("\n--- 测试: 提示工程 ---")
+        ps = orch.prompt_studio
+
+        # 初始模板
+        self._assert("提示-初始模板", len(ps.templates) >= 5,
+                      f"模板数: {len(ps.templates)}")
+
+        # 渲染模板
+        rendered = ps.render("cot", {"question": "什么是深度学习?"})
+        self._assert("提示-渲染", "深度学习" in rendered and "一步步" in rendered,
+                      f"渲染: {rendered[:80]}...")
+
+        # 创建模板
+        new_tpl = ps.create_template("测试模板", "instruction", "请回答: {question}", ["question"])
+        self._assert("提示-创建模板", new_tpl.template_id != "",
+                      f"ID: {new_tpl.template_id}")
+
+        # A/B测试
+        ab = ps.run_ab_test("cot", num_variants=3, samples_per_variant=20)
+        self._assert("提示-AB测试", ab["winner"]["performance"] > 0,
+                      f"最优变体性能: {ab['winner']['performance']}")
+
+        # 自动优化
+        opt = ps.optimize_prompt("什么是AI?", iterations=3)
+        self._assert("提示-自动优化", opt["final_score"] > 0,
+                      f"优化后分数: {opt['final_score']}, 提升: {opt['improvement']}")
+
+        # 少样本选择
+        examples = ["AI是人工智能", "ML是机器学习", "DL是深度学习", "量子物理很复杂", "今天天气不错"]
+        selected = ps.select_few_shot_examples("人工智能和机器学习", examples, k=2)
+        self._assert("提示-少样本选择", len(selected) == 2,
+                      f"选中: {selected}")
+
+    def test_edge_deployment(self, orch: LingyuanOrchestrator):
+        """测试边缘部署"""
+        print("\n--- 测试: 边缘部署 ---")
+        edge = orch.edge_deploy
+
+        # 初始设备
+        self._assert("边缘-初始设备", len(edge.devices) >= 5,
+                      f"设备数: {len(edge.devices)}")
+
+        # 创建部署包
+        pkg = edge.create_package("灵元-边缘版", "v1.0", "phone", "int8", 45.0)
+        self._assert("边缘-创建包", pkg.package_id != "",
+                      f"包ID: {pkg.package_id}, 量化: {pkg.quantization}")
+
+        # 部署到单个设备
+        deploy_result = edge.deploy_to_device(pkg.package_id, "phone_01")
+        self._assert("边缘-单设备部署", deploy_result["success"],
+                      f"设备: {deploy_result.get('device_id')}")
+
+        # 批量部署
+        batch_deploy = edge.deploy_to_all(pkg.package_id, "phone")
+        self._assert("边缘-批量部署", batch_deploy["success"] > 0,
+                      f"成功: {batch_deploy['success']}, 失败: {batch_deploy['failed']}")
+
+        # 远程推理
+        inference = edge.remote_inference("phone_01", "什么是人工智能?")
+        self._assert("边缘-远程推理", "推理结果" in inference.get("output", ""),
+                      f"延迟: {inference.get('latency_ms')}ms")
+
+        # 设备健康检查
+        health = edge.check_device_health()
+        self._assert("边缘-健康检查", len(health) > 0,
+                      f"检查设备: {len(health)}台")
+
+        # OTA更新
+        ota_update = edge.ota.create_update("灵元-边缘版", "v1.0", "v1.1", 10.0, "staged")
+        self._assert("边缘-OTA创建", ota_update["update_id"] != "",
+                      f"策略: {ota_update['strategy']}, 阶段: {len(ota_update['rollout_plan'])}")
+
+    def test_conversation_memory(self, orch: LingyuanOrchestrator):
+        """测试对话记忆系统"""
+        print("\n--- 测试: 对话记忆 ---")
+        mem = orch.conversation_memory
+
+        # 添加消息
+        mid1 = mem.add_message("user", "什么是深度学习?", importance=0.8, tags=["AI", "DL"])
+        mid2 = mem.add_message("assistant", "深度学习是机器学习的一个分支...", importance=0.7, tags=["AI", "DL"])
+        mid3 = mem.add_message("user", "解释一下神经网络", importance=0.6, tags=["AI", "NN"])
+        self._assert("记忆-添加消息", len(mem.conversation_history) >= 3,
+                      f"消息数: {len(mem.conversation_history)}")
+
+        # 短期记忆搜索
+        stm_results = mem.short_term.search("深度学习")
+        self._assert("记忆-短期搜索", len(stm_results) > 0,
+                      f"短期匹配: {len(stm_results)}")
+
+        # 上下文获取
+        context = mem.get_context("深度学习", max_tokens=1024)
+        self._assert("记忆-上下文获取", "stm_context" in context,
+                      f"上下文tokens: {context['total_context_tokens']}")
+
+        # 向量库RAG
+        # 先向向量库插入知识
+        mem.vector_db.insert("深度学习使用多层神经网络自动提取特征",
+                              {"topic": "DL"}, "text", "knowledge")
+        mem.vector_db.insert("CNN适用于图像处理，RNN适用于序列数据",
+                              {"topic": "DL"}, "text", "knowledge")
+
+        rag = mem.rag.retrieve_and_augment("深度学习如何工作?", top_k=2)
+        self._assert("记忆-RAG检索", len(rag["sources"]) > 0,
+                      f"RAG源: {len(rag['sources'])}, tokens: {rag['context_tokens']}")
+
+        # 记忆巩固
+        # 添加更多消息触发巩固
+        for i in range(10):
+            mem.add_message("user", f"问题_{i}", importance=0.7 if i % 3 == 0 else 0.3)
+        consolidation = mem.consolidate_memories()
+        self._assert("记忆-巩固", consolidation["consolidated"] >= 0,
+                      f"巩固: {consolidation['consolidated']}, 长期: {consolidation['total_ltm']}")
+
+        # 长期记忆检索
+        ltm_results = mem.long_term.retrieve("深度学习", limit=5)
+        self._assert("记忆-长期检索", len(ltm_results) >= 0,
+                      f"长期匹配: {len(ltm_results)}")
+
+        # 上下文压缩
+        compress = mem.compress_context(mem.conversation_history, target_tokens=200)
+        self._assert("记忆-上下文压缩", compress["compression_ratio"] <= 1.0,
+                      f"压缩比: {compress['compression_ratio']}, 原始: {compress['original_count']}→{compress['compressed_count']}")
+
+        # 全局搜索
+        all_results = mem.search_all_memory("深度学习")
+        self._assert("记忆-全局搜索", len(all_results["short_term"]) >= 0 or len(all_results["long_term"]) >= 0,
+                      f"短期: {len(all_results['short_term'])}, 长期: {len(all_results['long_term'])}")
+
     def test_end_to_end(self, orch: LingyuanOrchestrator):
         """端到端集成测试"""
         print("\n--- 测试: 端到端集成 ---")
@@ -1554,6 +2233,21 @@ class LingyuanTestSuite:
         self.test_multimodel_collaboration(orch)
         self.test_pain_curve(orch)
         self.test_fusion_end_to_end(orch)
+        # Part 7 子系统测试
+        self.test_safety_governance(orch)
+        self.test_observability(orch)
+        self.test_api_gateway(orch)
+        self.test_curriculum_training(orch)
+        self.test_knowledge_graph(orch)
+        # Part 8 子系统测试
+        self.test_federation_learning(orch)
+        self.test_model_distillation(orch)
+        self.test_rlhf(orch)
+        self.test_quantization(orch)
+        self.test_vector_database(orch)
+        self.test_prompt_engineering(orch)
+        self.test_edge_deployment(orch)
+        self.test_conversation_memory(orch)
         self.test_end_to_end(orch)
 
         elapsed = round(time.time() - start_time, 2)

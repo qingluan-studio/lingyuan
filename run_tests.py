@@ -24,6 +24,8 @@ def main():
         "part3.py",
         "part4.py",
         "part6.py",   # 融合决策引擎 (part5依赖其FusionDecisionEngine)
+        "part7.py",   # 安全/可观测/API/注册/课程/经济/知识图谱
+        "part8.py",   # 联邦学习/蒸馏/RLHF/量化/向量库/提示工程/边缘/记忆
         "part5.py",
     ]
 
