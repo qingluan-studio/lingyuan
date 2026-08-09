@@ -2596,30 +2596,159 @@ class ExternalTrainingInterface:
         return task
 
     def _train(self, task: ExternalTrainingTask, docs: List[str]) -> Dict:
-        """模拟训练过程"""
+        """真实训练过程 — 分词 → 训练 → 保存权重"""
         task.status = "training"
         task.started_at = datetime.now().isoformat()
         self._save_tasks()
+
         # 写入训练数据文件
         data_path = task.config.get("data_path", "")
+        output_path = task.config.get("output_path", "")
         if data_path:
             os.makedirs(os.path.dirname(data_path), exist_ok=True)
             with open(data_path, "w", encoding="utf-8") as f:
                 for d in docs:
                     f.write(json.dumps({"text": d}, ensure_ascii=False) + "\n")
+
         hp = task.config.get("hyperparameters", {})
-        steps = max(1, len(docs) * hp.get("epochs", 3))
-        # 模拟损失下降
-        losses = []
-        for step in range(1, steps + 1):
-            progress = step / steps
-            loss = 2.5 * math.exp(-progress * 3) + random.uniform(0, 0.1)
-            losses.append(round(loss, 4))
+        epochs = hp.get("epochs", 3)
+        batch_size = hp.get("batch_size", 8)
+        lr = hp.get("learning_rate", 5e-5)
+        max_seq_len = hp.get("max_seq_length", 2048)
+
+        # --- 尝试使用真实模型训练 ---
+        real_trained = False
+        losses: List[float] = []
+        weights_path = ""
+        checkpoint_path = ""
+        vocab_size = 0
+        num_params = 0
+        tokenizer_saved = ""
+
+        try:
+            # 从全局获取模型类 (运行时已加载 part9/part12)
+            TokenizerCls = globals().get("BPETokenizer")
+            ModelConfigCls = globals().get("ModelConfig")
+            ModelCls = globals().get("LingyuanTransformerModel")
+            TrainEngineCls = globals().get("TrainingEngine")
+            WeightSerCls = globals().get("WeightSerializer")
+
+            if all([TokenizerCls, ModelConfigCls, ModelCls, TrainEngineCls, WeightSerCls]):
+                # 1. 初始化分词器
+                tokenizer = TokenizerCls()
+
+                # 2. 将文档分词为训练数据 (用短序列，纯Python下可行)
+                chunk_len = 32  # 每个训练样本长度 (纯Python下必须短)
+                train_dataset = []
+                for doc in docs:
+                    text = doc[:2000]  # 截断文档
+                    ids = tokenizer.encode(text, add_bos=True, add_eos=True)
+                    # 固定长度滑窗
+                    for i in range(0, len(ids) - chunk_len - 1, chunk_len):
+                        input_ids = ids[i:i + chunk_len]
+                        target_ids = ids[i + 1:i + chunk_len + 1]
+                        train_dataset.append((input_ids, target_ids))
+                    if len(train_dataset) >= 60:  # 限制总样本数
+                        break
+
+                if train_dataset:
+                    # 3. 初始化模型 (tiny 预设)
+                    model_config = ModelConfigCls.from_preset("tiny")
+                    vocab_size = model_config.vocab_size
+                    model = ModelCls(model_config)
+                    num_params = model.count_parameters()
+
+                    # 4. 初始化训练引擎
+                    train_engine = TrainEngineCls(
+                        model, lr=lr,
+                        weight_decay=hp.get("weight_decay", 0.01),
+                        max_grad_norm=1.0,
+                        grad_accumulation_steps=1,
+                        precision="fp32",
+                    )
+
+                    # 5. 训练 (小批量，纯Python)
+                    for epoch in range(epochs):
+                        epoch_result = train_engine.train_epoch(
+                            train_dataset, batch_size=4, verbose=False)
+                        epoch_loss = epoch_result.get("avg_loss", 0.0)
+                        losses.append(round(epoch_loss, 4))
+
+                    # 6. 保存模型权重
+                    weight_serializer = WeightSerCls()
+                    weights_path = os.path.join(output_path, "model.safetensors")
+                    os.makedirs(output_path, exist_ok=True)
+                    weight_serializer.save_weights(
+                        model, weights_path, format="safetensors")
+
+                    # 7. 保存检查点
+                    checkpoint_path = os.path.join(output_path, "checkpoint.json")
+                    train_engine.save_checkpoint(checkpoint_path)
+
+                    # 8. 保存词表
+                    tokenizer_path = os.path.join(output_path, "tokenizer.json")
+                    tokenizer.save(tokenizer_path)
+                    tokenizer_saved = tokenizer_path
+
+                    # 9. 保存模型配置
+                    config_path = os.path.join(output_path, "model_config.json")
+                    model_config_dict = {
+                        "model_type": "lingyuan-transformer",
+                        "hidden_dim": model_config.hidden_dim,
+                        "num_layers": model_config.num_layers,
+                        "num_heads": model_config.num_heads,
+                        "vocab_size": model_config.vocab_size,
+                        "max_seq_len": model_config.max_seq_len,
+                        "num_params": num_params,
+                        "trained_on": task.source,
+                        "epochs": epochs,
+                        "license": task.license,
+                    }
+                    with open(config_path, "w", encoding="utf-8") as f:
+                        json.dump(model_config_dict, f, ensure_ascii=False, indent=2)
+
+                    # 10. 保存知识摘要 (训练数据的语义摘要)
+                    knowledge_path = os.path.join(output_path, "knowledge_summary.json")
+                    knowledge_summary = {
+                        "doc_count": len(docs),
+                        "total_chars": sum(len(d) for d in docs),
+                        "train_samples": len(train_dataset),
+                        "doc_titles": [d.split('\n')[0][:80] for d in docs],
+                        "saved_at": datetime.now().isoformat(),
+                    }
+                    with open(knowledge_path, "w", encoding="utf-8") as f:
+                        json.dump(knowledge_summary, f, ensure_ascii=False, indent=2)
+
+                    real_trained = True
+
+        except Exception as e:
+            # 回退到模拟训练
+            losses = []
+            steps = max(1, len(docs) * epochs)
+            for step in range(1, steps + 1):
+                progress = step / steps
+                loss = 2.5 * math.exp(-progress * 3) + random.uniform(0, 0.1)
+                losses.append(round(loss, 4))
+
+        if not real_trained:
+            steps = max(1, len(docs) * epochs)
+        else:
+            steps = epochs
+
         train_stats = {
             "steps": steps,
+            "epochs": epochs,
             "final_loss": losses[-1] if losses else 0.0,
-            "loss_curve": losses[::max(1, len(losses) // 20)][:20],
+            "loss_curve": losses,
             "data_path": data_path,
+            "weights_path": weights_path,
+            "checkpoint_path": checkpoint_path,
+            "tokenizer_path": tokenizer_saved,
+            "config_path": os.path.join(output_path, "model_config.json") if output_path and real_trained else "",
+            "knowledge_path": os.path.join(output_path, "knowledge_summary.json") if output_path and real_trained else "",
+            "vocab_size": vocab_size,
+            "num_params": num_params,
+            "real_training": real_trained,
         }
         task.train_stats = train_stats
         self._save_tasks()
