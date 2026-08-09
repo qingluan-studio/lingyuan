@@ -186,6 +186,120 @@ def _cross_entropy_loss(logits: List[List[float]],
     return total / max(n, 1)
 
 
+# ============================================================
+# 反向传播辅助函数 (真实梯度计算)
+# ============================================================
+
+def _silu_grad(x: float) -> float:
+    """SiLU/Swish的导数: sigmoid(x) * (1 + x * (1 - sigmoid(x)))"""
+    if x < -50:
+        return 0.0
+    sig = 1.0 / (1.0 + math.exp(-x))
+    return sig * (1.0 + x * (1.0 - sig))
+
+
+def _rmsnorm_backward(dout: List[List[float]],
+                      x_norm: List[List[float]],
+                      rms: List[float],
+                      weight: List[float],
+                      dim: int) -> Tuple[List[List[float]], List[float]]:
+    """RMSNorm反向传播
+
+    y = x_norm * weight,  x_norm = x / rms
+
+    Args:
+        dout: dL/dy (seq × dim)
+        x_norm: x / rms (seq × dim) — 前向缓存的归一化值
+        rms: 各位置的RMS值 (seq,)
+        weight: 可学习缩放参数 (dim,)
+        dim: 维度
+
+    Returns:
+        (dx, dweight) — dL/dx (seq×dim) 和 dL/dweight (dim,)
+    """
+    seq_len = len(x_norm)
+    dx: List[List[float]] = [[0.0] * dim for _ in range(seq_len)]
+    dweight: List[float] = [0.0] * dim
+
+    for s in range(seq_len):
+        xn = x_norm[s]
+        dy = dout[s]
+        r = rms[s]
+        if r < 1e-12:
+            r = 1e-12
+        # g_s = sum_j(dy_j * y_j) = sum_j(dy_j * x_norm_j * weight_j)
+        g_s = 0.0
+        for j in range(dim):
+            g_s += dy[j] * xn[j] * weight[j]
+        inv_n = 1.0 / dim
+        for d in range(dim):
+            dweight[d] += dy[d] * xn[d]
+            dx[s][d] = (dy[d] * weight[d] - xn[d] * g_s * inv_n) / r
+
+    return dx, dweight
+
+
+def _rope_backward(dout: List[List[float]],
+                   rope_cos: List[List[float]],
+                   rope_sin: List[List[float]],
+                   seq_offset: int,
+                   head_dim: int) -> List[List[float]]:
+    """RoPE反向传播
+
+    RoPE是旋转操作, 其雅可比的转置等于逆旋转。
+    正向: x'[2i]   = x[2i]*cos - x[2i+1]*sin
+          x'[2i+1] = x[2i]*sin + x[2i+1]*cos
+    反向: dL/dx[2i]   = dL/dx'[2i]*cos + dL/dx'[2i+1]*sin
+          dL/dx[2i+1] = -dL/dx'[2i]*sin + dL/dx'[2i+1]*cos
+    """
+    seq_len = len(dout)
+    half = head_dim // 2
+    dx: List[List[float]] = []
+    for si in range(seq_len):
+        pos = seq_offset + si
+        if pos >= len(rope_cos):
+            pos = len(rope_cos) - 1
+        cos = rope_cos[pos]
+        sin = rope_sin[pos]
+        d_row = dout[si]
+        new_row = list(d_row)  # 保留未旋转维度
+        for i in range(half):
+            d1 = d_row[2 * i]
+            d2 = d_row[2 * i + 1]
+            new_row[2 * i] = d1 * cos[i] + d2 * sin[i]
+            new_row[2 * i + 1] = -d1 * sin[i] + d2 * cos[i]
+        dx.append(new_row)
+    return dx
+
+
+def _softmax_backward_row(dout: List[float],
+                          probs: List[float]) -> List[float]:
+    """Softmax反向传播 (单行)
+
+    dL/dx_j = probs_j * (dL/dy_j - sum_k(probs_k * dL/dy_k))
+    """
+    n = len(probs)
+    dot = 0.0
+    for k in range(n):
+        dot += probs[k] * dout[k]
+    return [probs[j] * (dout[j] - dot) for j in range(n)]
+
+
+def _outer_product_add(grad: List[List[float]],
+                       a: List[float], b: List[float],
+                       scale: float = 1.0) -> None:
+    """grad += scale * a ⊗ b  (a: m, b: n, grad: m×n)  原地累加"""
+    m = len(a)
+    n = len(b)
+    for i in range(m):
+        ai = a[i] * scale
+        if ai == 0.0:
+            continue
+        gi = grad[i]
+        for j in range(n):
+            gi[j] += ai * b[j]
+
+
 # 预设配置 (模型与ModelConfig共用)
 _MODEL_PRESETS: Dict[str, Dict[str, Any]] = {
     "tiny": {
@@ -1389,6 +1503,223 @@ class LingyuanTransformerModel:
                               last_token_only=True)
         return logits, cache
 
+    # ---------- 训练专用前向传播 (带完整梯度缓存) ----------
+
+    def forward_for_training(self, input_ids: List[int],
+                             targets: List[int]
+                             ) -> Tuple[float, List[List[float]], Dict[str, Any]]:
+        """训练用前向传播 — 保存所有中间激活值供真实反向传播使用
+
+        与 forward() 逻辑一致, 但额外缓存:
+        - 嵌入向量
+        - 每层的: 输入、norm归一化值、Q/K/V投影、注意力权重、FFN中间值
+        - 最终norm的归一化值
+        - logits
+
+        Returns:
+            (loss, logits, cache)
+        """
+        seq_len = len(input_ids)
+        hidden = self.hidden_dim
+        cache: Dict[str, Any] = {"input_ids": list(input_ids)}
+
+        # === 1. Token Embedding ===
+        x = self.embed(input_ids)
+        cache["embeddings"] = [list(row) for row in x]
+
+        # 绝对位置编码 (叠加)
+        if self.pos_method == "absolute":
+            abs_pe = self.positional_encoding.get_absolute(seq_len)
+            x = [[x[s][d] + abs_pe[s][d] for d in range(hidden)]
+                 for s in range(seq_len)]
+
+        # === 2. Transformer 层 ===
+        layer_caches: List[Dict[str, Any]] = []
+        rope_cos = self.positional_encoding._rope_cos if self.pos_method == "rope" else None
+        rope_sin = self.positional_encoding._rope_sin if self.pos_method == "rope" else None
+
+        for layer in self.layers:
+            lc: Dict[str, Any] = {}
+            attn = layer.attn
+            num_heads = attn.num_heads
+            num_kv_heads = attn.num_kv_heads
+            head_dim = attn.head_dim
+            n_rep = attn.n_rep
+            use_rope = (attn.positional_encoding is not None
+                        and attn.positional_encoding.method == "rope")
+
+            # --- 2a. 注意力子层 (PreNorm) ---
+            lc["layer_input"] = [list(row) for row in x]  # 残差输入
+
+            # RMSNorm 1
+            norm1_x_norm: List[List[float]] = []
+            norm1_rms: List[float] = []
+            h1: List[List[float]] = []
+            for row in x:
+                n = len(row)
+                ms = sum(v * v for v in row) / n
+                r = math.sqrt(ms + layer.norm_eps)
+                xn = [v / r for v in row]
+                norm1_x_norm.append(xn)
+                norm1_rms.append(r)
+                h1.append([xn[d] * layer.norm1.weight[d] for d in range(hidden)])
+            lc["norm1_x_norm"] = norm1_x_norm
+            lc["norm1_rms"] = norm1_rms
+
+            # Q/K/V 投影
+            Q = _linear_2d(h1, attn.W_q)   # (seq × hidden)
+            K = _linear_2d(h1, attn.W_k)   # (seq × kv_dim)
+            V = _linear_2d(h1, attn.W_v)   # (seq × kv_dim)
+
+            # 分头
+            Q_heads = _split_heads_2d(Q, num_heads)
+            K_heads = _split_heads_2d(K, num_kv_heads)
+            V_heads = _split_heads_2d(V, num_kv_heads)
+
+            # RoPE
+            if use_rope:
+                Q_heads_rot = [attn.positional_encoding.apply_rotary_emb(h, 0) for h in Q_heads]
+                K_heads_rot = [attn.positional_encoding.apply_rotary_emb(h, 0) for h in K_heads]
+            else:
+                Q_heads_rot = Q_heads
+                K_heads_rot = K_heads
+
+            # 因果掩码
+            mask = attn._build_causal_mask(seq_len, seq_len, 0)
+            scale = 1.0 / math.sqrt(head_dim)
+
+            # 逐头注意力 (保存注意力权重)
+            attn_weights_all: List[List[List[float]]] = []
+            out_heads: List[List[List[float]]] = []
+
+            for h_idx in range(num_heads):
+                q_h = Q_heads_rot[h_idx]
+                # GQA: 对应的KV头索引
+                kv_idx = h_idx // n_rep if n_rep > 1 else h_idx
+                k_h = K_heads_rot[kv_idx] if use_rope else K_heads[kv_idx]
+                v_h = V_heads[kv_idx]
+
+                # 计算注意力分数
+                scores_h: List[List[float]] = []
+                for qi in range(seq_len):
+                    row_s = [0.0] * seq_len
+                    qv = q_h[qi]
+                    for ki in range(qi + 1):  # 因果: 只看 ki <= qi
+                        s_val = 0.0
+                        kv = k_h[ki]
+                        for d in range(head_dim):
+                            s_val += qv[d] * kv[d]
+                        row_s[ki] = s_val * scale
+                    scores_h.append(row_s)
+
+                # Softmax (只对有效位置)
+                attn_w_h = []
+                for qi in range(seq_len):
+                    valid_scores = scores_h[qi][:qi + 1]
+                    probs = _softmax_vec(valid_scores)
+                    full_probs = probs + [0.0] * (seq_len - qi - 1)
+                    attn_w_h.append(full_probs)
+                attn_weights_all.append(attn_w_h)
+
+                # 加权求和
+                out_h: List[List[float]] = []
+                for qi in range(seq_len):
+                    o = [0.0] * head_dim
+                    for ki in range(qi + 1):
+                        w = attn_w_h[qi][ki]
+                        if w == 0.0:
+                            continue
+                        vk = v_h[ki]
+                        for d in range(head_dim):
+                            o[d] += w * vk[d]
+                    out_h.append(o)
+                out_heads.append(out_h)
+
+            lc["attn_weights"] = attn_weights_all
+            lc["Q_heads_rot"] = Q_heads_rot
+            lc["K_heads_rot"] = K_heads_rot
+            lc["V_heads"] = V_heads
+            lc["attn_scale"] = scale
+
+            # 合并头 + 输出投影
+            merged = _merge_heads_2d(out_heads)
+            lc["attn_merged"] = merged
+            attn_out = _linear_2d(merged, attn.W_o)
+
+            # 残差
+            x = [[x[s][d] + attn_out[s][d] for d in range(hidden)]
+                 for s in range(seq_len)]
+
+            # --- 2b. FFN 子层 (PreNorm) ---
+            lc["input_after_attn"] = [list(row) for row in x]
+
+            # RMSNorm 2
+            norm2_x_norm: List[List[float]] = []
+            norm2_rms: List[float] = []
+            h2: List[List[float]] = []
+            for row in x:
+                n = len(row)
+                ms = sum(v * v for v in row) / n
+                r = math.sqrt(ms + layer.norm_eps)
+                xn = [v / r for v in row]
+                norm2_x_norm.append(xn)
+                norm2_rms.append(r)
+                h2.append([xn[d] * layer.norm2.weight[d] for d in range(hidden)])
+            lc["norm2_x_norm"] = norm2_x_norm
+            lc["norm2_rms"] = norm2_rms
+
+            # SwiGLU FFN
+            gate = _linear_2d(h2, layer.ffn.W_gate)
+            up = _linear_2d(h2, layer.ffn.W_up)
+            ffn_dim = layer.ffn.ffn_dim
+            activated = [[_silu(gate[s][i]) * up[s][i]
+                           for i in range(ffn_dim)]
+                          for s in range(seq_len)]
+            ffn_out = _linear_2d(activated, layer.ffn.W_down)
+
+            lc["ffn_gate"] = gate
+            lc["ffn_up"] = up
+            lc["ffn_activated"] = activated
+            lc["ffn_out"] = ffn_out
+
+            # 残差
+            x = [[x[s][d] + ffn_out[s][d] for d in range(hidden)]
+                 for s in range(seq_len)]
+
+            lc["layer_output"] = [list(row) for row in x]
+            layer_caches.append(lc)
+
+        cache["layers"] = layer_caches
+
+        # === 3. 最终 RMSNorm ===
+        final_x_norm: List[List[float]] = []
+        final_rms: List[float] = []
+        h_final: List[List[float]] = []
+        for row in x:
+            n = len(row)
+            ms = sum(v * v for v in row) / n
+            r = math.sqrt(ms + self.norm_eps)
+            xn = [v / r for v in row]
+            final_x_norm.append(xn)
+            final_rms.append(r)
+            h_final.append([xn[d] * self.final_norm.weight[d] for d in range(hidden)])
+        cache["final_x_norm"] = final_x_norm
+        cache["final_rms"] = final_rms
+        cache["final_norm_out"] = h_final
+
+        # === 4. LM Head ===
+        if self.tie_word_embeddings:
+            emb_t = _transpose_2d(self.token_embedding)  # (hidden × vocab)
+            logits = _matmul_2d(h_final, emb_t)          # (seq × vocab)
+        else:
+            logits = _matmul_2d(h_final, self.lm_head)    # (seq × vocab)
+        cache["logits"] = logits
+
+        # === 5. 损失 ===
+        loss = _cross_entropy_loss(logits, targets)
+
+        return loss, logits, cache
+
     # ---------- 预设 ----------
 
     @classmethod
@@ -2165,41 +2496,430 @@ class TrainingEngine:
                 (1.0 + math.cos(math.pi * progress))
         return base
 
-    # ---------- 前向 / 反向 ----------
+    # ---------- 前向 / 反向 (真实梯度) ----------
 
     def forward_pass(self, input_ids: List[int],
-                     targets: List[int]) -> Tuple[float, List[List[float]]]:
-        """前向传播 + 损失计算
+                     targets: List[int]
+                     ) -> Tuple[float, List[List[float]], Dict[str, Any]]:
+        """前向传播 + 损失计算 + 梯度缓存
 
-        Args:
-            input_ids: 输入token ids
-            targets: 目标token ids (与input_ids等长, 错位预测)
+        使用 model.forward_for_training() 保存所有中间激活值,
+        供 backward_pass 计算真实梯度。
 
         Returns:
-            (loss, logits)
+            (loss, logits, cache)
         """
-        logits = self.model.forward(input_ids, training=True)
+        loss, logits, cache = self.model.forward_for_training(input_ids, targets)
         # 混合精度: 转换logits
         if self.mixed_precision.precision != "fp32":
             logits = self.mixed_precision.cast_matrix(logits)
-        loss = _cross_entropy_loss(logits, targets)
-        # 损失缩放
-        if self.mixed_precision.precision != "fp32":
             loss = self.mixed_precision.scale_loss(loss)
-        return loss, logits
+        return loss, logits, cache
 
     def backward_pass(self, logits: List[List[float]],
                       targets: List[int],
-                      hidden_states: Optional[List[List[float]]] = None
+                      cache: Optional[Dict[str, Any]] = None
                       ) -> Dict[str, Any]:
-        """简化反向传播 (梯度计算)
+        """真实反向传播 — 基于前向缓存计算数学正确的梯度
 
-        策略:
-        - LM Head / Embedding: 计算真实梯度 (softmax - onehot)
-        - Transformer层: 基于激活幅值和损失信号的近似梯度
+        逐层使用链式法则:
+        1. dL/dlogits = softmax(logits) - onehot(targets)
+        2. LM Head: dL/dh_final = d_logits @ W_lmhead^T; dL/dW = h^T @ d_logits
+        3. 最终RMSNorm: 真实梯度
+        4. 每层 (逆序):
+           - FFN (SwiGLU): 真实梯度 through gate/up/down
+           - RMSNorm2: 真实梯度
+           - Attention: 真实梯度 through Q/K/V/O + softmax Jacobian
+           - RMSNorm1: 真实梯度
+        5. Embedding: 真实梯度
 
         Returns:
             梯度字典 {param_name: grad}
+        """
+        if cache is None:
+            # 退化: 无法计算真实梯度
+            return self._backward_pass_legacy(logits, targets)
+
+        seq_len = min(len(logits), len(targets))
+        if seq_len == 0:
+            return {}
+
+        model = self.model
+        hidden = model.hidden_dim
+        vocab = model.vocab_size
+        layer_caches = cache.get("layers", [])
+        input_ids = cache.get("input_ids", [])
+        h_final = cache["final_norm_out"]
+        final_x_norm = cache["final_x_norm"]
+        final_rms = cache["final_rms"]
+        tie = model.tie_word_embeddings
+
+        grads: Dict[str, Any] = {}
+
+        # === 1. dL/dlogits = softmax(logits) - onehot(targets) ===
+        d_logits: List[List[float]] = []
+        for i in range(seq_len):
+            probs = _softmax_vec(logits[i])
+            tgt = targets[i]
+            if 0 <= tgt < len(probs):
+                probs[tgt] -= 1.0
+            d_logits.append(probs)
+
+        # === 2. LM Head 反向 ===
+        # logits = h_final @ W_lmhead (或 token_embedding^T)
+        # dL/dh_final = d_logits @ W_lmhead^T  (seq × hidden)
+        # dL/dW_lmhead = h_final^T @ d_logits   (hidden × vocab)
+        if tie:
+            # W_lmhead = token_embedding^T (hidden × vocab)
+            # dL/dh_final[s] = sum_v d_logits[s][v] * token_embedding[v]  (对v求和)
+            d_h_final: List[List[float]] = []
+            for s in range(seq_len):
+                dl = d_logits[s]
+                dh = [0.0] * hidden
+                for v in range(vocab):
+                    dlv = dl[v]
+                    if dlv == 0.0:
+                        continue
+                    emb_v = model.token_embedding[v]
+                    for d in range(hidden):
+                        dh[d] += dlv * emb_v[d]
+                d_h_final.append(dh)
+            # dL/dtoken_embedding (from LM head) = h_final^T @ d_logits
+            # 只累加, 后面 embedding 查表部分再叠加
+            grad_emb: List[List[float]] = [[0.0] * hidden for _ in range(vocab)]
+            for s in range(seq_len):
+                hf_s = h_final[s]
+                dl = d_logits[s]
+                for v in range(vocab):
+                    dlv = dl[v]
+                    if dlv == 0.0:
+                        continue
+                    ge = grad_emb[v]
+                    for d in range(hidden):
+                        ge[d] += hf_s[d] * dlv
+        else:
+            # W_lmhead: (hidden × vocab)
+            # dL/dh_final = d_logits @ W_lmhead^T
+            d_h_final = []
+            for s in range(seq_len):
+                dl = d_logits[s]
+                dh = [0.0] * hidden
+                for d in range(hidden):
+                    s_val = 0.0
+                    wd = model.lm_head[d]
+                    for v in range(vocab):
+                        s_val += dl[v] * wd[v]
+                    dh[d] = s_val
+                d_h_final.append(dh)
+            # dL/dlm_head = h_final^T @ d_logits  (hidden × vocab)
+            grad_lm_head: List[List[float]] = [[0.0] * vocab for _ in range(hidden)]
+            for s in range(seq_len):
+                hf_s = h_final[s]
+                dl = d_logits[s]
+                for d in range(hidden):
+                    hfd = hf_s[d]
+                    if hfd == 0.0:
+                        continue
+                    gl = grad_lm_head[d]
+                    for v in range(vocab):
+                        gl[v] += hfd * dl[v]
+            grads["lm_head"] = grad_lm_head
+            grad_emb = [[0.0] * hidden for _ in range(vocab)]
+
+        # === 3. 最终 RMSNorm 反向 ===
+        d_x, d_final_norm_w = _rmsnorm_backward(
+            d_h_final, final_x_norm, final_rms,
+            model.final_norm.weight, hidden)
+        grads["final_norm_weight"] = d_final_norm_w
+
+        # === 4. 逐层反向 (逆序) ===
+        for layer_idx in range(model.num_layers - 1, -1, -1):
+            layer = model.layers[layer_idx]
+            lc = layer_caches[layer_idx]
+            attn = layer.attn
+            ffn = layer.ffn
+            num_heads = attn.num_heads
+            num_kv_heads = attn.num_kv_heads
+            head_dim = attn.head_dim
+            n_rep = attn.n_rep
+            kv_dim = attn.kv_dim
+            ffn_dim = ffn.ffn_dim
+            norm_eps = layer.norm_eps
+
+            # d_x 当前是 dL/d(layer_output)
+            # 残差: x_out = x_mid + ffn_out
+            # dL/dx_mid = dL/dx_out (残差直通)
+            # dL/dffn_out = dL/dx_out (残差直通)
+            d_x_mid = [list(row) for row in d_x]
+            d_ffn_out = [list(row) for row in d_x]
+
+            # --- 4a. FFN (SwiGLU) 反向 ---
+            # ffn_out = activated @ W_down
+            # dL/dW_down = activated^T @ d_ffn_out  (ffn_dim × hidden)
+            # dL/dactivated = d_ffn_out @ W_down^T  (seq × ffn_dim)
+            activated = lc["ffn_activated"]
+            h2 = lc["norm2_x_norm"]  # norm2 output (x_norm * weight) used as FFN input
+            # Actually h2 stored is x_norm, need to multiply by weight for norm2 output
+            # Wait - in forward_for_training, h2 = [xn[d] * weight[d] for d] which is the norm2 output
+            # But we stored norm2_x_norm (the x/rms values, not multiplied by weight)
+            # We need the actual h2 values (norm2 output) for FFN backward
+            # h2 = norm2_x_norm * norm2.weight
+            norm2_weight = layer.norm2.weight
+            h2_actual = [[lc["norm2_x_norm"][s][d] * norm2_weight[d]
+                          for d in range(hidden)]
+                         for s in range(seq_len)]
+
+            W_down_t = _transpose_2d(ffn.W_down)  # (hidden × ffn_dim)
+            d_activated = _matmul_2d(d_ffn_out, W_down_t)  # (seq × ffn_dim)
+
+            grad_W_down: List[List[float]] = [[0.0] * hidden for _ in range(ffn_dim)]
+            for s in range(seq_len):
+                _outer_product_add(grad_W_down, activated[s], d_ffn_out[s])
+
+            # activated = silu(gate) * up
+            # dL/dgate = dL/dactivated * up * silu'(gate)
+            # dL/dup = dL/dactivated * silu(gate)
+            gate = lc["ffn_gate"]
+            up = lc["ffn_up"]
+            d_gate: List[List[float]] = [[0.0] * ffn_dim for _ in range(seq_len)]
+            d_up: List[List[float]] = [[0.0] * ffn_dim for _ in range(seq_len)]
+            for s in range(seq_len):
+                da = d_activated[s]
+                gs = gate[s]
+                us = up[s]
+                dg = d_gate[s]
+                du = d_up[s]
+                for i in range(ffn_dim):
+                    sg = _silu(gs[i])
+                    dg[i] = da[i] * us[i] * _silu_grad(gs[i])
+                    du[i] = da[i] * sg
+
+            # gate = h2 @ W_gate, up = h2 @ W_up
+            # dL/dW_gate = h2^T @ d_gate  (hidden × ffn_dim)
+            # dL/dW_up = h2^T @ d_up      (hidden × ffn_dim)
+            # dL/dh2 = d_gate @ W_gate^T + d_up @ W_up^T  (seq × hidden)
+            grad_W_gate: List[List[float]] = [[0.0] * ffn_dim for _ in range(hidden)]
+            grad_W_up: List[List[float]] = [[0.0] * ffn_dim for _ in range(hidden)]
+            for s in range(seq_len):
+                h2s = h2_actual[s]
+                _outer_product_add(grad_W_gate, h2s, d_gate[s])
+                _outer_product_add(grad_W_up, h2s, d_up[s])
+
+            W_gate_t = _transpose_2d(ffn.W_gate)  # (ffn_dim × hidden)
+            W_up_t = _transpose_2d(ffn.W_up)
+            d_h2_from_gate = _matmul_2d(d_gate, W_gate_t)  # (seq × hidden)
+            d_h2_from_up = _matmul_2d(d_up, W_up_t)
+            d_h2 = [[d_h2_from_gate[s][d] + d_h2_from_up[s][d]
+                      for d in range(hidden)]
+                     for s in range(seq_len)]
+
+            # --- 4b. RMSNorm 2 反向 ---
+            d_x_from_norm2, d_norm2_w = _rmsnorm_backward(
+                d_h2, lc["norm2_x_norm"], lc["norm2_rms"],
+                norm2_weight, hidden)
+            grads[f"layer_{layer_idx}_norm2"] = d_norm2_w
+
+            # 累加到 d_x_mid (残差 + norm2反向)
+            for s in range(seq_len):
+                for d in range(hidden):
+                    d_x_mid[s][d] += d_x_from_norm2[s][d]
+
+            # --- 4c. Attention 反向 ---
+            # 残差: x_mid = x_in + attn_out
+            # dL/dx_in = dL/dx_mid (残差直通)
+            # dL/d_attn_out = dL/dx_mid (残差直通)
+            d_x_in = [list(row) for row in d_x_mid]
+            d_attn_out = [list(row) for row in d_x_mid]
+
+            # attn_out = merged @ W_o
+            # dL/dW_o = merged^T @ d_attn_out  (hidden × hidden)
+            # dL/dmerged = d_attn_out @ W_o^T  (seq × hidden)
+            merged = lc["attn_merged"]
+            grad_W_o: List[List[float]] = [[0.0] * hidden for _ in range(hidden)]
+            for s in range(seq_len):
+                _outer_product_add(grad_W_o, merged[s], d_attn_out[s])
+
+            W_o_t = _transpose_2d(attn.W_o)  # (hidden × hidden)
+            d_merged = _matmul_2d(d_attn_out, W_o_t)  # (seq × hidden)
+
+            # 拆分回各头: d_merged (seq × hidden) -> [num_heads × (seq × head_dim)]
+            d_out_heads = _split_heads_2d(d_merged, num_heads)
+
+            # 逐头注意力反向
+            Q_heads_rot = lc["Q_heads_rot"]
+            K_heads_rot = lc["K_heads_rot"]
+            V_heads = lc["V_heads"]
+            attn_weights = lc["attn_weights"]
+            scale = lc["attn_scale"]
+
+            # 累积各头的 Q/K/V 梯度 (post-RoPE)
+            d_Q_heads_rot: List[List[List[float]]] = [
+                [[0.0] * head_dim for _ in range(seq_len)]
+                for _ in range(num_heads)]
+            d_K_heads_rot: List[List[List[float]]] = [
+                [[0.0] * head_dim for _ in range(seq_len)]
+                for _ in range(num_kv_heads)]
+            d_V_heads: List[List[List[float]]] = [
+                [[0.0] * head_dim for _ in range(seq_len)]
+                for _ in range(num_kv_heads)]
+
+            for h_idx in range(num_heads):
+                q_h = Q_heads_rot[h_idx]
+                kv_idx = h_idx // n_rep if n_rep > 1 else h_idx
+                k_h = K_heads_rot[kv_idx] if attn.positional_encoding and \
+                    attn.positional_encoding.method == "rope" else \
+                    lc.get("K_heads_rot", lc.get("K_heads", [[]]))[kv_idx]
+                v_h = V_heads[kv_idx]
+                aw = attn_weights[h_idx]
+                dout_h = d_out_heads[h_idx]
+
+                # 1. dL/dV[j] = sum_i aw[i][j] * dout[i]
+                for j in range(seq_len):
+                    dv = d_V_heads[kv_idx][j]
+                    for i in range(j, seq_len):  # 因果: i >= j
+                        w = aw[i][j]
+                        if w == 0.0:
+                            continue
+                        di = dout_h[i]
+                        for d in range(head_dim):
+                            dv[d] += w * di[d]
+
+                # 2. dL/daw[i][j] = sum_d dout[i][d] * V[j][d]
+                d_aw: List[List[float]] = [[0.0] * seq_len for _ in range(seq_len)]
+                for i in range(seq_len):
+                    di = dout_h[i]
+                    for j in range(i + 1):  # 因果
+                        vj = v_h[j]
+                        s_val = 0.0
+                        for d in range(head_dim):
+                            s_val += di[d] * vj[d]
+                        d_aw[i][j] = s_val
+
+                # 3. Softmax 反向: dL/dscores[i][j] = aw[i][j] * (d_aw[i][j] - sum_k aw[i][k]*d_aw[i][k])
+                d_scores: List[List[float]] = [[0.0] * seq_len for _ in range(seq_len)]
+                for i in range(seq_len):
+                    probs = aw[i]
+                    dout_row = d_aw[i]
+                    d_scores[i] = _softmax_backward_row(dout_row, probs)
+
+                # 4. dL/dQ[i] = sum_j d_scores[i][j] * scale * K[j]
+                for i in range(seq_len):
+                    dq = d_Q_heads_rot[h_idx][i]
+                    for j in range(i + 1):
+                        ds = d_scores[i][j] * scale
+                        if ds == 0.0:
+                            continue
+                        kj = k_h[j]
+                        for d in range(head_dim):
+                            dq[d] += ds * kj[d]
+
+                # 5. dL/dK[j] = sum_i d_scores[i][j] * scale * Q[i]
+                for j in range(seq_len):
+                    dk = d_K_heads_rot[kv_idx][j]
+                    for i in range(j, seq_len):  # 因果: i >= j
+                        ds = d_scores[i][j] * scale
+                        if ds == 0.0:
+                            continue
+                        qi = q_h[i]
+                        for d in range(head_dim):
+                            dk[d] += ds * qi[d]
+
+            # 合并 Q 梯度 (post-RoPE) -> pre-RoPE
+            d_Q_merged = _merge_heads_2d(d_Q_heads_rot)  # (seq × hidden)
+            d_K_merged = _merge_heads_2d(d_K_heads_rot)  # (seq × kv_dim)
+            d_V_merged = _merge_heads_2d(d_V_heads)      # (seq × kv_dim)
+
+            # RoPE 反向 (逆旋转)
+            use_rope = (attn.positional_encoding is not None
+                        and attn.positional_encoding.method == "rope")
+            if use_rope:
+                rope_cos = attn.positional_encoding._rope_cos
+                rope_sin = attn.positional_encoding._rope_sin
+                d_Q_pre = _rope_backward(d_Q_merged, rope_cos, rope_sin, 0, head_dim)
+                # 注意: Q_merged 是 hidden 维, 但 RoPE 只作用于 head_dim 维
+                # 分头 -> 逆旋转 -> 合并
+                d_Q_heads_pre = [_rope_backward(d_Q_heads_rot[h], rope_cos, rope_sin, 0, head_dim)
+                                  for h in range(num_heads)]
+                d_Q_pre = _merge_heads_2d(d_Q_heads_pre)
+                d_K_heads_pre = [_rope_backward(d_K_heads_rot[k], rope_cos, rope_sin, 0, head_dim)
+                                  for k in range(num_kv_heads)]
+                d_K_pre = _merge_heads_2d(d_K_heads_pre)
+            else:
+                d_Q_pre = d_Q_merged
+                d_K_pre = d_K_merged
+            d_V_pre = d_V_merged
+
+            # Q/K/V 投影反向: Q = h1 @ W_q
+            # dL/dW_q = h1^T @ d_Q_pre  (hidden × hidden)
+            # dL/dW_k = h1^T @ d_K_pre  (hidden × kv_dim)
+            # dL/dW_v = h1^T @ d_V_pre  (hidden × kv_dim)
+            # dL/dh1 = d_Q_pre @ W_q^T + d_K_pre @ W_k^T + d_V_pre @ W_v^T
+            h1_actual = [[lc["norm1_x_norm"][s][d] * layer.norm1.weight[d]
+                          for d in range(hidden)]
+                         for s in range(seq_len)]
+
+            grad_W_q: List[List[float]] = [[0.0] * hidden for _ in range(hidden)]
+            grad_W_k: List[List[float]] = [[0.0] * kv_dim for _ in range(hidden)]
+            grad_W_v: List[List[float]] = [[0.0] * kv_dim for _ in range(hidden)]
+            for s in range(seq_len):
+                h1s = h1_actual[s]
+                _outer_product_add(grad_W_q, h1s, d_Q_pre[s])
+                _outer_product_add(grad_W_k, h1s, d_K_pre[s])
+                _outer_product_add(grad_W_v, h1s, d_V_pre[s])
+
+            W_q_t = _transpose_2d(attn.W_q)
+            W_k_t = _transpose_2d(attn.W_k)
+            W_v_t = _transpose_2d(attn.W_v)
+            d_h1 = _matmul_2d(d_Q_pre, W_q_t)
+            d_h1_k = _matmul_2d(d_K_pre, W_k_t)
+            d_h1_v = _matmul_2d(d_V_pre, W_v_t)
+            for s in range(seq_len):
+                for d in range(hidden):
+                    d_h1[s][d] += d_h1_k[s][d] + d_h1_v[s][d]
+
+            # --- 4d. RMSNorm 1 反向 ---
+            d_x_from_norm1, d_norm1_w = _rmsnorm_backward(
+                d_h1, lc["norm1_x_norm"], lc["norm1_rms"],
+                layer.norm1.weight, hidden)
+            grads[f"layer_{layer_idx}_norm1"] = d_norm1_w
+
+            # 累加到 d_x_in (残差 + norm1反向)
+            for s in range(seq_len):
+                for d in range(hidden):
+                    d_x_in[s][d] += d_x_from_norm1[s][d]
+
+            # 存储层梯度
+            grads[f"layer_{layer_idx}_W_q"] = grad_W_q
+            grads[f"layer_{layer_idx}_W_k"] = grad_W_k
+            grads[f"layer_{layer_idx}_W_v"] = grad_W_v
+            grads[f"layer_{layer_idx}_W_o"] = grad_W_o
+            grads[f"layer_{layer_idx}_W_gate"] = grad_W_gate
+            grads[f"layer_{layer_idx}_W_up"] = grad_W_up
+            grads[f"layer_{layer_idx}_W_down"] = grad_W_down
+
+            # d_x_in 传递给上一层
+            d_x = d_x_in
+
+        # === 5. Embedding 反向 ===
+        # d_x 是 dL/d(embeddings)
+        # 对于每个 input_ids[s], 累加梯度到 token_embedding[input_ids[s]]
+        for s in range(seq_len):
+            tid = input_ids[s] if s < len(input_ids) else -1
+            if 0 <= tid < vocab:
+                ge = grad_emb[tid]
+                dxs = d_x[s]
+                for d in range(hidden):
+                    ge[d] += dxs[d]
+
+        grads["token_embedding"] = grad_emb
+
+        return grads
+
+    def _backward_pass_legacy(self, logits: List[List[float]],
+                              targets: List[int]) -> Dict[str, Any]:
+        """退化反向传播 (无缓存时使用近似梯度)
+
+        当 forward_pass 未提供 cache 时回退到此方法。
         """
         seq_len = min(len(logits), len(targets))
         if seq_len == 0:
@@ -2208,7 +2928,6 @@ class TrainingEngine:
         grads: Dict[str, Any] = {}
         vocab = self.model.vocab_size
 
-        # 1. dL/dlogits = softmax(logits) - onehot(targets) [真实]
         d_logits = []
         for i in range(seq_len):
             probs = _softmax_vec(logits[i])
@@ -2217,60 +2936,34 @@ class TrainingEngine:
                 probs[tgt] -= 1.0
             d_logits.append(probs)
 
-        # 损失信号强度
         loss_signal = sum(sum(abs(v) for v in row) for row in d_logits) / max(seq_len, 1)
 
-        # 2. LM Head梯度 (真实: dL/dW_lmhead = h^T @ d_logits)
         if not self.model.tie_word_embeddings and self.model.lm_head is not None:
-            # 简化: 使用单位缩放
-            grad_lm_head = [[loss_signal * 0.01 * random.gauss(0, 1)
-                             for _ in range(vocab)]
-                            for _ in range(self.model.hidden_dim)]
-            grads["lm_head"] = grad_lm_head
+            grads["lm_head"] = [[loss_signal * 0.01 * random.gauss(0, 1)
+                                  for _ in range(vocab)]
+                                 for _ in range(self.model.hidden_dim)]
 
-        # 3. Embedding梯度 (近似: 基于损失信号)
-        grad_emb = [[loss_signal * 0.01 * random.gauss(0, 1)
-                     for _ in range(self.model.hidden_dim)]
-                    for _ in range(vocab)]
-        grads["token_embedding"] = grad_emb
+        grads["token_embedding"] = [[loss_signal * 0.01 * random.gauss(0, 1)
+                                      for _ in range(self.model.hidden_dim)]
+                                     for _ in range(vocab)]
 
-        # 4. 各层梯度 (近似: 基于激活幅值和损失信号)
         for i, layer in enumerate(self.model.layers):
             attn_dim = layer.attn.hidden_dim
             kv_dim = layer.attn.kv_dim
             ffn_dim = layer.ffn.ffn_dim
             scale = loss_signal * 0.005
+            grads[f"layer_{i}_W_q"] = [[scale * random.gauss(0, 1) for _ in range(attn_dim)] for _ in range(attn_dim)]
+            grads[f"layer_{i}_W_k"] = [[scale * random.gauss(0, 1) for _ in range(kv_dim)] for _ in range(attn_dim)]
+            grads[f"layer_{i}_W_v"] = [[scale * random.gauss(0, 1) for _ in range(kv_dim)] for _ in range(attn_dim)]
+            grads[f"layer_{i}_W_o"] = [[scale * random.gauss(0, 1) for _ in range(attn_dim)] for _ in range(attn_dim)]
+            grads[f"layer_{i}_norm1"] = [scale * random.gauss(0, 1) for _ in range(attn_dim)]
+            grads[f"layer_{i}_norm2"] = [scale * random.gauss(0, 1) for _ in range(attn_dim)]
+            grads[f"layer_{i}_W_gate"] = [[scale * random.gauss(0, 1) for _ in range(ffn_dim)] for _ in range(attn_dim)]
+            grads[f"layer_{i}_W_up"] = [[scale * random.gauss(0, 1) for _ in range(ffn_dim)] for _ in range(attn_dim)]
+            grads[f"layer_{i}_W_down"] = [[scale * random.gauss(0, 1) for _ in range(attn_dim)] for _ in range(ffn_dim)]
 
-            grads[f"layer_{i}_W_q"] = [[scale * random.gauss(0, 1)
-                                         for _ in range(attn_dim)]
-                                        for _ in range(attn_dim)]
-            grads[f"layer_{i}_W_k"] = [[scale * random.gauss(0, 1)
-                                         for _ in range(kv_dim)]
-                                        for _ in range(attn_dim)]
-            grads[f"layer_{i}_W_v"] = [[scale * random.gauss(0, 1)
-                                         for _ in range(kv_dim)]
-                                        for _ in range(attn_dim)]
-            grads[f"layer_{i}_W_o"] = [[scale * random.gauss(0, 1)
-                                         for _ in range(attn_dim)]
-                                        for _ in range(attn_dim)]
-            grads[f"layer_{i}_norm1"] = [scale * random.gauss(0, 1)
-                                          for _ in range(attn_dim)]
-            grads[f"layer_{i}_norm2"] = [scale * random.gauss(0, 1)
-                                          for _ in range(attn_dim)]
-            grads[f"layer_{i}_W_gate"] = [[scale * random.gauss(0, 1)
-                                            for _ in range(ffn_dim)]
-                                           for _ in range(attn_dim)]
-            grads[f"layer_{i}_W_up"] = [[scale * random.gauss(0, 1)
-                                          for _ in range(ffn_dim)]
-                                         for _ in range(attn_dim)]
-            grads[f"layer_{i}_W_down"] = [[scale * random.gauss(0, 1)
-                                            for _ in range(attn_dim)]
-                                           for _ in range(ffn_dim)]
-
-        # 最终norm梯度
         grads["final_norm_weight"] = [loss_signal * 0.01 * random.gauss(0, 1)
-                                      for _ in range(self.model.hidden_dim)]
-
+                                       for _ in range(self.model.hidden_dim)]
         return grads
 
     # ---------- 梯度管理 ----------
@@ -2366,12 +3059,12 @@ class TrainingEngine:
         all_grads: List[Dict[str, Any]] = []
         for shard in shards:
             for input_ids, targets in shard:
-                # 前向
-                loss, logits = self.forward_pass(input_ids, targets)
+                # 前向 (带梯度缓存)
+                loss, logits, fwd_cache = self.forward_pass(input_ids, targets)
                 step_loss += loss
 
-                # 反向 (简化梯度)
-                grads = self.backward_pass(logits, targets)
+                # 反向 (真实梯度, 使用前向缓存)
+                grads = self.backward_pass(logits, targets, cache=fwd_cache)
 
                 # 混合精度: 反向缩放
                 if self.mixed_precision.precision != "fp32":

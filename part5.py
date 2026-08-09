@@ -2284,7 +2284,7 @@ class LingyuanTestSuite:
                         max_batch=1)
         self._assert("KVCache-初始化", cache is not None, "")
         # 训练引擎
-        loss, _ = orch.training_engine.forward_pass(input_ids, input_ids)
+        loss, _, _ = orch.training_engine.forward_pass(input_ids, input_ids)
         self._assert("训练引擎-前向", loss >= 0, f"loss: {loss}")
 
     def test_external_data(self, orch: LingyuanOrchestrator):
