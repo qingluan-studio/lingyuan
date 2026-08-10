@@ -63,6 +63,7 @@ data/lingyuan/
 lingyuan_data/
 lingyuan_logs/
 lingyuan_config/
+lingyuan_enterprise_data/
 
 # --- 数据目录下的 JSON / JSON in data directories ---
 data/*.json
