@@ -863,7 +863,17 @@ class HeteroGPU:
     # ========== 生成 ==========
 
     def generate(self, prompt: List[int], max_new: int = 32,
-                  temperature: float = 0.8) -> List[int]:
+                  temperature: float = 0.8, top_k: int = 0,
+                  top_p: float = 0.0) -> List[int]:
+        """生成文本 v2 — 支持 top-k / top-p 采样
+
+        Args:
+            prompt: 输入token序列
+            max_new: 最多生成多少token
+            temperature: 温度, 越低越确定
+            top_k: 只从概率最高的k个中采样, 0=不限制
+            top_p: nucleus sampling, 只从累积概率>=p的最小集合中采样, 0=不限制
+        """
         tokens = list(prompt)
         for _ in range(max_new):
             ctx = tokens[-self.cfg.max_seq_len:]
@@ -871,16 +881,51 @@ class HeteroGPU:
             last = logits.data[-1]
 
             if temperature > 0:
+                # 计算softmax概率
                 mx = max(last)
-                sm = sum(math.exp((l - mx) / temperature) for l in last)
+                exp_vals = [math.exp((l - mx) / temperature) for l in last]
+                sm = sum(exp_vals)
+                probs = [e / sm for e in exp_vals]
+
+                # top-k 过滤
+                if top_k > 0 and top_k < len(probs):
+                    indexed = sorted(range(len(probs)),
+                                     key=lambda i: -probs[i])
+                    keep = set(indexed[:top_k])
+                    for i in range(len(probs)):
+                        if i not in keep:
+                            probs[i] = 0.0
+                    sm = sum(probs)
+                    if sm > 0:
+                        probs = [p / sm for p in probs]
+
+                # top-p (nucleus) 过滤
+                if top_p > 0 and top_p < 1.0:
+                    indexed = sorted(range(len(probs)),
+                                     key=lambda i: -probs[i])
+                    cum = 0.0
+                    keep = set()
+                    for idx in indexed:
+                        cum += probs[idx]
+                        keep.add(idx)
+                        if cum >= top_p:
+                            break
+                    for i in range(len(probs)):
+                        if i not in keep:
+                            probs[i] = 0.0
+                    sm = sum(probs)
+                    if sm > 0:
+                        probs = [p / sm for p in probs]
+
+                # 采样
                 r = random.random()
                 cum = 0.0
-                for idx in range(len(last)):
-                    cum += math.exp((last[idx] - mx) / temperature) / sm
+                for idx in range(len(probs)):
+                    cum += probs[idx]
                     if r < cum:
                         tokens.append(idx); break
                 else:
-                    tokens.append(len(last) - 1)
+                    tokens.append(len(probs) - 1)
             else:
                 tokens.append(max(range(len(last)), key=lambda i: last[i]))
         return tokens
@@ -1200,8 +1245,35 @@ class HeteroGPU:
                     sum(logits_grad.data[t][j] for t in range(s)), clip)
 
     def _update_params(self):
-        """梯度更新"""
+        """梯度更新 v2 — 含梯度范数裁剪"""
         lr = self.cfg.learning_rate
+        max_norm = getattr(self.cfg, 'grad_clip', 1.0)
+
+        # 梯度裁剪: 计算全局范数并缩放
+        if max_norm > 0:
+            total_norm_sq = 0.0
+            for layer in self._layers:
+                for name in ["w1", "w2", "b1", "b2",
+                              "ln1_g", "ln1_b", "ln2_g", "ln2_b"]:
+                    t = layer[name]
+                    if t._grad:
+                        for row in t._grad:
+                            for v in row:
+                                total_norm_sq += v * v
+            for t in [self._head, self._head_bias, self._embed,
+                       self._final_ln_g, self._final_ln_b]:
+                if t._grad:
+                    for row in t._grad:
+                        for v in row:
+                            total_norm_sq += v * v
+            total_norm = math.sqrt(total_norm_sq)
+            if total_norm > max_norm and total_norm > 0:
+                scale = max_norm / total_norm
+            else:
+                scale = 1.0
+        else:
+            scale = 1.0
+
         for layer in self._layers:
             for name in ["w1", "w2", "b1", "b2",
                           "ln1_g", "ln1_b", "ln2_g", "ln2_b"]:
@@ -1209,7 +1281,7 @@ class HeteroGPU:
                 if t._grad:
                     for i in range(t.rows):
                         for j in range(t.cols):
-                            t.data[i][j] -= lr * t._grad[i][j]
+                            t.data[i][j] -= lr * (t._grad[i][j] * scale)
                             t._grad[i][j] = 0.0
 
         for t in [self._head, self._head_bias, self._embed,
@@ -1217,7 +1289,7 @@ class HeteroGPU:
             if t._grad:
                 for i in range(t.rows):
                     for j in range(t.cols):
-                        t.data[i][j] -= lr * t._grad[i][j]
+                        t.data[i][j] -= lr * (t._grad[i][j] * scale)
                         t._grad[i][j] = 0.0
 
     # ========== 自举训练 ==========

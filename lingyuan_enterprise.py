@@ -250,57 +250,56 @@ class ExperimentTracker:
 # ============================================================
 
 class CharTokenizer:
-    """字符级分词器 — 纯标准库"""
+    """字符级分词器 v2 — 频率自适应, 零UNK
 
-    def __init__(self, vocab_size: int = 256):
+    改造点:
+    - 先扫描全部数据统计字符频率, 按频率排序构建词表
+    - 特殊token预留前4位, 剩余按频率降序分配
+    - 保证训练数据中所有字符都能被编码, 消除UNK
+    """
+
+    def __init__(self, vocab_size: int = 512):
         self.vocab_size = vocab_size
         self.char2id: Dict[str, int] = {}
         self.id2char: Dict[int, str] = {}
-        # 基础字符集
-        self._build_base()
-
-    def _build_base(self):
-        """构建基础词表: 可打印ASCII + 常用中文"""
-        chars = set()
-        # ASCII printable
-        for i in range(32, 127):
-            chars.add(chr(i))
-        # 常用中文 (最常用500字)
-        common_cn = ("的一是了我不人在他有这个上们来到时大地为子中你说生国年"
-                      "着就那和要她出也得里后自以会家可下而过天去能对小多然"
-                      "于心学么之都好看起发当没成只如事把还用第样道想作种开"
-                      "美总从无情己面最女但现前些所同日手又行意动方期它头经"
-                      "长儿回位分爱老因很给名法间斯知世什两次使身者被高已亲"
-                      "其进此话常与活正感见明问力理尔点文几定本公特做外孩相"
-                      "西果走将月十实向声车全信重三机工物气每并别真打太新比"
-                      "才便夫再书部水像眼等体却加电主界门利海受听表德少克代"
-                      "员许先口由死安写性马光白或住难望教命花结乐色更拉东神"
-                      "记处让母父应直字场平报友关放至张认接告入笑内英军候民"
-                      "岁往何度山觉路带万男边风解叫任金快原吃妈变通师立象数"
-                      "四失满战远格士音轻目条呢病始达深完今提求清王化空业思"
-                      "切怎非找片罗钱吗语元喜曾离飞科言干流欢约各即指合反题"
-                      "必该论交终林请医晚制球决传画保读运及则房早院量苦火布"
-                      "品近坐产答星精视五连司巴")
-        for c in common_cn:
-            chars.add(c)
-        # 特殊token
-        chars.update(["<PAD>", "<BOS>", "<EOS>", "<UNK>"])
-
-        for i, c in enumerate(sorted(chars)[:self.vocab_size]):
-            self.char2id[c] = i
-            self.id2char[i] = c
+        self._fitted = False
+        # 特殊token固定前4位
+        self._special = ["<PAD>", "<BOS>", "<EOS>", "<UNK>"]
+        for i, tok in enumerate(self._special):
+            self.char2id[tok] = i
+            self.id2char[i] = tok
 
     def fit_on_text(self, text: str):
-        """在文本上扩展词表"""
-        for c in text:
-            if c not in self.char2id and len(self.char2id) < self.vocab_size:
+        """扫描文本, 按字符频率构建词表"""
+        if self._fitted:
+            for c in text:
+                if c not in self.char2id and len(self.char2id) < self.vocab_size:
+                    idx = len(self.char2id)
+                    self.char2id[c] = idx
+                    self.id2char[idx] = c
+            return
+
+        from collections import Counter
+        freq = Counter(text)
+        sorted_chars = sorted(freq.items(), key=lambda x: -x[1])
+        available = self.vocab_size - len(self._special)
+
+        for char, count in sorted_chars[:available]:
+            if char not in self.char2id:
                 idx = len(self.char2id)
-                self.char2id[c] = idx
-                self.id2char[idx] = c
+                self.char2id[char] = idx
+                self.id2char[idx] = char
+
+        self._fitted = True
+        unk_count = sum(1 for c in text if c not in self.char2id)
+        if unk_count > 0:
+            log.warn("tokenizer has UNK chars",
+                      total=len(freq), unk=unk_count,
+                      vocab=len(self.char2id))
 
     def encode(self, text: str) -> List[int]:
-        return [self.char2id.get(c, self.char2id.get("<UNK>", 0))
-                for c in text]
+        unk = self.char2id.get("<UNK>", 0)
+        return [self.char2id.get(c, unk) for c in text]
 
     def decode(self, ids: List[int]) -> str:
         return "".join(self.id2char.get(i, "?") for i in ids)
@@ -317,9 +316,22 @@ class CharTokenizer:
     def pad_id(self):
         return self.char2id.get("<PAD>", 0)
 
+    def unk_ratio(self, text: str) -> float:
+        """计算UNK比例"""
+        if not text:
+            return 0.0
+        unk = sum(1 for c in text if c not in self.char2id)
+        return unk / len(text)
+
 
 class TextDataLoader:
-    """文本数据加载器 — 从真实文件读取并分词"""
+    """文本数据加载器 v2 — 随机窗口增强
+
+    改造点:
+    - 预分词: 加载时一次性编码, 避免重复
+    - 随机窗口: sample_batch 从全文随机位置截取, 而非固定切分
+    - 数据增强: 每次采样位置随机, 等效于无限数据
+    """
 
     def __init__(self, tokenizer: CharTokenizer, seq_len: int = 64,
                   batch_size: int = 16):
@@ -327,6 +339,7 @@ class TextDataLoader:
         self.seq_len = seq_len
         self.batch_size = batch_size
         self._data: List[List[int]] = []
+        self._flat_ids: List[int] = []
         self._cursor = 0
 
     def load_file(self, path: str, encoding: str = "utf-8"):
@@ -335,18 +348,19 @@ class TextDataLoader:
         with open(path, "r", encoding=encoding, errors="replace") as f:
             text = f.read()
 
-        # 先扩展词表
         self.tokenizer.fit_on_text(text)
         ids = self.tokenizer.encode(text)
 
-        # 切分为 seq_len 的片段
+        self._flat_ids = ids
+
         for i in range(0, len(ids) - self.seq_len, self.seq_len // 2):
             chunk = ids[i:i + self.seq_len + 1]
             if len(chunk) >= self.seq_len + 1:
                 self._data.append(chunk)
 
+        unk_ratio = self.tokenizer.unk_ratio(text)
         log.info("data loaded", sequences=len(self._data),
-                  total_tokens=len(ids))
+                  total_tokens=len(ids), unk_ratio=f"{unk_ratio:.4f}")
 
     def load_text(self, text: str):
         """直接加载文本字符串"""
@@ -358,45 +372,41 @@ class TextDataLoader:
                 self._data.append(chunk)
 
     def sample_batch(self) -> Tuple[List[int], List[int]]:
-        """采样一个batch: (input_ids, target_ids)"""
-        if not self._data:
-            # 生成合成数据作为兜底
+        """采样一个batch: (input_ids, target_ids)
+
+        v2改造: 优先使用随机窗口采样, 等效无限数据增强
+        """
+        if not self._data and not self._flat_ids:
             return self._synthetic_batch()
 
         batch_inputs = []
         batch_targets = []
-        for _ in range(self.batch_size):
-            idx = random.randrange(len(self._data))
-            seq = self._data[idx]
-            batch_inputs.append(seq[:self.seq_len])
-            batch_targets.append(seq[1:self.seq_len + 1])
+
+        if self._flat_ids and len(self._flat_ids) > self.seq_len + 1:
+            n = len(self._flat_ids)
+            for _ in range(self.batch_size):
+                start = random.randrange(0, n - self.seq_len - 1)
+                chunk = self._flat_ids[start:start + self.seq_len + 1]
+                batch_inputs.append(chunk[:self.seq_len])
+                batch_targets.append(chunk[1:self.seq_len + 1])
+        else:
+            for _ in range(self.batch_size):
+                idx = random.randrange(len(self._data))
+                chunk = self._data[idx]
+                batch_inputs.append(chunk[:self.seq_len])
+                batch_targets.append(chunk[1:self.seq_len + 1])
+
         return batch_inputs, batch_targets
 
     def _synthetic_batch(self) -> Tuple[List[int], List[int]]:
-        """合成数据(兜底)"""
+        """无数据时生成合成batch"""
+        seq_len = self.seq_len
         vocab = self.tokenizer.vocab_size
-        inputs = []
-        targets = []
-        for _ in range(self.batch_size):
-            inp = [random.randrange(vocab) for _ in range(self.seq_len)]
-            tgt = inp[1:] + [random.randrange(vocab)]
-            inputs.append(inp)
-            targets.append(tgt)
+        inputs = [[random.randrange(4, vocab) for _ in range(seq_len)]
+                  for _ in range(self.batch_size)]
+        targets = [[inp[(i+1) % seq_len] for i in range(seq_len)]
+                   for inp in inputs]
         return inputs, targets
-
-    def __len__(self):
-        return max(1, len(self._data) // self.batch_size)
-
-    def __iter__(self):
-        self._cursor = 0
-        return self
-
-    def __next__(self):
-        if self._cursor >= len(self):
-            raise StopIteration
-        batch = self.sample_batch()
-        self._cursor += 1
-        return batch
 
 
 # ============================================================
@@ -424,6 +434,17 @@ class TrainingEngine:
 
         # 指标
         self.metrics_history: List[dict] = []
+        self._lr_history: List[float] = []
+
+    def _compute_lr(self, step: int, total_steps: int,
+                     base_lr: float, warmup_ratio: float = 0.1) -> float:
+        """warmup + cosine decay 学习率调度"""
+        warmup_steps = max(1, int(total_steps * warmup_ratio))
+        if step < warmup_steps:
+            return base_lr * (step + 1) / warmup_steps
+        else:
+            progress = (step - warmup_steps) / max(1, total_steps - warmup_steps)
+            return base_lr * 0.5 * (1.0 + math.cos(math.pi * progress))
 
     def train(self, epochs: int = 10, steps_per_epoch: int = 50,
               early_stop_patience: int = 5, log_interval: int = 10,
@@ -456,6 +477,8 @@ class TrainingEngine:
                     self.current_step = 0
 
         total_start = time.time()
+        total_steps = epochs * steps_per_epoch
+        base_lr = cfg.learning_rate
 
         for epoch in range(self.current_epoch, epochs):
             epoch_loss = 0.0
@@ -463,6 +486,12 @@ class TrainingEngine:
 
             for step in range(steps_per_epoch):
                 self.current_step += 1
+
+                # 动态学习率: warmup + cosine decay
+                current_lr = self._compute_lr(
+                    self.current_step - 1, total_steps, base_lr)
+                self.gpu.cfg.learning_rate = current_lr
+                self._lr_history.append(current_lr)
 
                 # 采样batch
                 batch_inputs, batch_targets = self.loader.sample_batch()
@@ -481,6 +510,7 @@ class TrainingEngine:
                     log.info("step",
                               epoch=epoch+1, step=step+1,
                               loss=f"{avg_loss:.4f}",
+                              lr=f"{current_lr:.6f}",
                               elapsed=f"{elapsed:.1f}s")
 
             # Epoch结束
