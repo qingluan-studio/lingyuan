@@ -438,8 +438,22 @@ class TrainingEngine:
                 self.current_epoch = latest.epoch
                 self.current_step = latest.step
                 self.best_loss = latest.loss
-                log.info("resumed from checkpoint",
-                          epoch=self.current_epoch, step=self.current_step)
+                # 恢复模型权重
+                try:
+                    loaded = type(self.gpu).load(latest.path)
+                    self.gpu._embed = loaded._embed
+                    self.gpu._head = loaded._head
+                    self.gpu._head_bias = loaded._head_bias
+                    self.gpu._final_ln_g = loaded._final_ln_g
+                    self.gpu._final_ln_b = loaded._final_ln_b
+                    self.gpu._layers = loaded._layers
+                    log.info("resumed from checkpoint",
+                              epoch=self.current_epoch, step=self.current_step)
+                except Exception as e:
+                    log.warn("failed to restore weights, starting fresh",
+                              error=str(e))
+                    self.current_epoch = 0
+                    self.current_step = 0
 
         total_start = time.time()
 

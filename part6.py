@@ -497,40 +497,16 @@ class PainCurveOptimizer:
         self.total_budget = total_budget
         self.time_horizon = time_steps
 
-        # 初始化: 均匀分配
-        curve = [total_budget / time_steps] * time_steps
+        # 闭式解: p_t ∝ δ^t (贴现分布), 归一化到预算
+        # 人性偏好反向补偿: 把10%的后期痛苦前移
+        raw = [self.discount ** t for t in range(time_steps)]
+        raw_sum = sum(raw)
+        curve = [total_budget * r / raw_sum for r in raw]
 
-        # 贴现权重
-        weights = [self.discount ** t for t in range(time_steps)]
-
-        # 梯度下降优化
-        lr = 0.01
-        for iteration in range(200):
-            # 目标: min Σ w_t · p_t  s.t. Σ p_t = budget, p_t ≥ 0
-            # 拉格朗日: L = Σ w_t·p_t + λ·(Σp_t - budget)
-            # dL/dp_t = w_t + λ = 0 → p_t ∝ 1/w_t (贴现越大痛苦越小)
-            # 但需要反向补偿: 早期多承担痛苦
-
-            # 简化: 贴现因子使远端痛苦权重小, 但反向补偿要求前期保守
-            # 最优解: p_t ∝ δ^(-t) (反转贴现, 前期少痛苦)
-            # 实际是 min Σ δ^t · p_t, 所以 p_t 应该在 δ^t 小的地方(后期)多分配
-            # 但有人性偏好修正: 推迟痛苦 → 需要反向 → 前期多分配
-            # 最终: p_t ∝ δ^t (正常贴现, 后期多痛苦)
-
-            # 计算梯度
-            total_weighted = sum(w * p for w, p in zip(weights, curve))
-            if total_weighted == 0:
-                break
-
-            # 归一化到预算
-            raw = [self.discount ** t for t in range(time_steps)]
-            raw_sum = sum(raw)
-            curve = [total_budget * r / raw_sum for r in raw]
-
-            # 人性偏好反向补偿: 把10%的后期痛苦前移
-            compensation = curve[-1] * 0.1
-            curve[-1] -= compensation
-            curve[0] += compensation
+        # 人性偏好反向补偿: 把10%的后期痛苦前移
+        compensation = curve[-1] * 0.1
+        curve[-1] -= compensation
+        curve[0] += compensation
 
         self.optimal_curve = [round(p, 6) for p in curve]
         return self.optimal_curve

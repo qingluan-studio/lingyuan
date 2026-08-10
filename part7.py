@@ -36,11 +36,11 @@ class ContentSafetyFilter:
 
     # 敏感类别
     CATEGORIES = {
-        "violence": {"keywords": ["暴力", "攻击", "伤害", "harm", "attack"], "threshold": 0.7},
+        "violence": {"keywords": ["暴力", "攻击", "伤害", "harm", "attack", "打人", "杀人", "实施暴力"], "threshold": 0.7},
         "self_harm": {"keywords": ["自残", "自杀", "self-harm", "suicide"], "threshold": 0.8},
-        "illegal": {"keywords": ["违法", "毒品", "illegal", "drug"], "threshold": 0.7},
-        "privacy": {"keywords": ["身份证", "密码", "password", "phone"], "threshold": 0.6},
-        "manipulation": {"keywords": ["操纵", "欺骗", "manipulate", "deceive"], "threshold": 0.65},
+        "illegal": {"keywords": ["违法", "毒品", "illegal", "drug", "违禁", "获取违禁"], "threshold": 0.7},
+        "privacy": {"keywords": ["身份证", "密码", "password", "phone", "身份证号", "个人隐私"], "threshold": 0.6},
+        "manipulation": {"keywords": ["操纵", "欺骗", "manipulate", "deceive", "骗取", "欺诈"], "threshold": 0.65},
     }
 
     def __init__(self):
@@ -71,8 +71,17 @@ class ContentSafetyFilter:
                     score += 0.5
                     matched_keywords.append(kw)
 
-            # 模糊匹配加分 (模拟语义相似度)
-            score += random.uniform(0.1, 0.35)
+            # 确定性模糊匹配 (bigram重叠度)
+            content_bigrams = set()
+            for i in range(len(content) - 1):
+                content_bigrams.add(content_lower[i:i+2])
+            for kw in config["keywords"]:
+                kw_lower = kw.lower()
+                kw_bigrams = set()
+                for i in range(len(kw_lower) - 1):
+                    kw_bigrams.add(kw_lower[i:i+2])
+                if kw_bigrams and kw_bigrams & content_bigrams:
+                    score += 0.15
 
             if score >= config["threshold"]:
                 triggered.append({

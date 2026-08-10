@@ -561,8 +561,8 @@ class HeteroGPU:
         return out
 
     def _layernorm_backward(self, grad_out: Tensor,
-                             context: tuple) -> None:
-        """LayerNorm反向传播"""
+                             context: tuple) -> Tensor:
+        """LayerNorm反向传播 — 完整正确版, 返回dx"""
         x, gamma, beta, means, ivars, norms = context
         r, c = x.shape()
 
@@ -574,30 +574,23 @@ class HeteroGPU:
                 if beta._grad:
                     beta._grad[0][j] += grad_out.data[i][j]
 
-        # x grad
+        # x grad — 完整LayerNorm反向
+        dx = Tensor.zeros(r, c)
         for i in range(r):
             dx_hat = [grad_out.data[i][j] * gamma.data[0][j] for j in range(c)]
+            # dvar
             dvar = sum(dx_hat[j] * (x.data[i][j] - means[i]) * -0.5 *
                         ivars[i] ** 3 for j in range(c))
-            dmean = sum(-dx_hat[j] * ivars[i] for j in range(c)) + \
-                     dvar * -2 * sum(x.data[i][j] - means[i] for j in range(c)) / c
-            for j in range(c):
-                if x._grad:
-                    x._grad[i][j] += (dx_hat[j] * ivars[i] +
-                                       dvar * 2 * (x.data[i][j] - means[i]) / c +
-                                       dmean / c)
-            # 这里dmean需要再除以c (上面已乘了c)
+            # dmean
+            dmean = sum(-dx_hat[j] * ivars[i] for j in range(c))
+            dmean += dvar * sum(-2.0 * (x.data[i][j] - means[i]) for j in range(c)) / c
 
-        # Fix dmean: need to divide by c
-        for i in range(r):
-            if x._grad:
-                for j in range(c):
-                    x._grad[i][j] -= dmean / c
-                    # 上面已经加了dmean/c，需要修正为dmean/c
-                    # 简化处理：清除重算
-                    pass
-        # LayerNorm backward 完整版太复杂，这里用简化版
-        # Production代码应使用完整反向，但对演示足够
+            for j in range(c):
+                dx.data[i][j] = dx_hat[j] * ivars[i]
+                dx.data[i][j] += dvar * 2.0 * (x.data[i][j] - means[i]) / c
+                dx.data[i][j] += dmean / c
+
+        return dx
 
     # ========== 多头注意力 (真分头) ==========
 
@@ -677,12 +670,12 @@ class HeteroGPU:
                 out.data[i][j] = s2 + b2.data[0][j]
 
         # 存中间值
-        out._ffn_ctx = (x, w1, w2, h)  # 用于反向
+        out._ffn_ctx = (x, w1, w2, h, b1, b2)  # 用于反向
         return out
 
-    def _ffn_backward(self, grad_out: Tensor, ctx: tuple):
-        """FFN反向传播"""
-        x, w1, w2, h = ctx
+    def _ffn_backward(self, grad_out: Tensor, ctx: tuple) -> Tensor:
+        """FFN反向传播 — 返回dx"""
+        x, w1, w2, h, b1, b2 = ctx
         s, d = x.shape()
         f = w1.cols
 
@@ -696,9 +689,9 @@ class HeteroGPU:
                     w2._grad[m][j] += g
 
         # b2 grad
-        if hasattr(self, '_last_b2') and self._last_b2._grad:
+        if b2._grad:
             for j in range(d):
-                self._last_b2._grad[0][j] += sum(
+                b2._grad[0][j] += sum(
                     grad_out.data[i][j] for i in range(s))
 
         # h grad
@@ -708,8 +701,9 @@ class HeteroGPU:
                 g = sum(grad_out.data[i][j] * w2.data[m][j] for j in range(d))
                 # GELU backward
                 z = h.data[i][m]
-                gelu_z = z / (1.0 + math.exp(-1.702 * z))
-                gelu_grad = gelu_z / z if abs(z) > 1e-8 else 0.5
+                # GELU derivative: sigmoid(1.702*z) + z * sigmoid'(1.702*z) * 1.702
+                sig = 1.0 / (1.0 + math.exp(-1.702 * z))
+                gelu_grad = sig + z * sig * (1.0 - sig) * 1.702
                 h_grad.data[i][m] = g * gelu_grad
 
         # w1 grad
@@ -720,17 +714,19 @@ class HeteroGPU:
                     w1._grad[m][j] += g
 
         # b1 grad
-        if hasattr(self, '_last_b1') and self._last_b1._grad:
+        if b1._grad:
             for j in range(f):
-                self._last_b1._grad[0][j] += sum(
+                b1._grad[0][j] += sum(
                     h_grad.data[i][j] for i in range(s))
 
         # x grad
-        if x._grad:
-            for i in range(s):
-                for m in range(d):
-                    x._grad[i][m] += sum(
-                        h_grad.data[i][j] * w1.data[m][j] for j in range(f))
+        dx = Tensor.zeros(s, d)
+        for i in range(s):
+            for m in range(d):
+                dx.data[i][m] = sum(
+                    h_grad.data[i][j] * w1.data[m][j] for j in range(f))
+
+        return dx
 
     # ========== Transformer块 ==========
 
@@ -773,6 +769,46 @@ class HeteroGPU:
                 out.data[i][j] = sum(x.data[i][m] * w.data[m][j]
                                       for m in range(d))
         return out
+
+    def _linear_bias(self, x: Tensor, w: Tensor, b: Tensor) -> Tensor:
+        """x @ w + b"""
+        s, d = x.shape()
+        out = Tensor.zeros(s, w.cols)
+        for i in range(s):
+            for j in range(w.cols):
+                out.data[i][j] = sum(x.data[i][m] * w.data[m][j]
+                                      for m in range(d))
+                out.data[i][j] += b.data[0][j]
+        return out
+
+    def _attention_with_weights(self, Q: Tensor, K: Tensor, V: Tensor,
+                                 scale: float) -> Tuple[Tensor, list]:
+        """Dense causal attention with stored weights for backward"""
+        s = Q.rows
+        d_v = V.cols
+        out = Tensor.zeros(s, d_v)
+        all_weights = []
+
+        for qi in range(s):
+            scores = []
+            for ki in range(qi + 1):  # causal mask
+                sc = sum(Q.data[qi][d] * K.data[ki][d]
+                          for d in range(Q.cols)) * scale
+                scores.append(sc)
+
+            # Softmax
+            mx = max(scores)
+            exps = [math.exp(s - mx) for s in scores]
+            sm = sum(exps)
+            weights = [e / sm for e in exps]
+            all_weights.append(weights)
+
+            for ki in range(qi + 1):
+                w = weights[ki]
+                for d in range(d_v):
+                    out.data[qi][d] += w * V.data[ki][d]
+
+        return out, all_weights
 
     # ========== 嵌入 ==========
 
@@ -851,13 +887,102 @@ class HeteroGPU:
 
     # ========== 训练 ==========
 
+    def _training_forward(self, ids: List[int]) -> Tuple[Tensor, list, Tensor, List[int]]:
+        """训练用前向传播 — 存储所有中间激活用于反向"""
+        ids = ids[:self.cfg.max_seq_len]
+        s = len(ids)
+        h = self.cfg.hidden_dim
+        nh = self.cfg.num_heads
+        hd = self.cfg.head_dim
+
+        # Embedding
+        x = self.embed(ids)
+        activations = []
+
+        for l in range(self.cfg.num_layers):
+            w = self._layers[l]
+
+            # Pre-norm 1
+            n1 = self.layernorm(x, w["ln1_g"], w["ln1_b"])
+
+            # Attention (dense, store weights)
+            Q = self._linear(n1, w["wq"])
+            K = self._linear(n1, w["wk"])
+            V = self._linear(n1, w["wv"])
+            scale = 1.0 / math.sqrt(hd)
+
+            head_outputs = []
+            head_attn_weights = []
+            for hh in range(nh):
+                Qh = Tensor([[Q.data[i][hh*hd + j] for j in range(hd)]
+                              for i in range(s)])
+                Kh = Tensor([[K.data[i][hh*hd + j] for j in range(hd)]
+                              for i in range(s)])
+                Vh = Tensor([[V.data[i][hh*hd + j] for j in range(hd)]
+                              for i in range(s)])
+                head_out, attn_w = self._attention_with_weights(Qh, Kh, Vh, scale)
+                head_outputs.append(head_out)
+                head_attn_weights.append(attn_w)
+
+            concat = Tensor.zeros(s, h)
+            for hh in range(nh):
+                for i in range(s):
+                    for j in range(hd):
+                        concat.data[i][hh*hd + j] = head_outputs[hh].data[i][j]
+
+            attn_out = self._linear(concat, w["wo"])
+
+            # Residual
+            h_res = Tensor.zeros(s, h)
+            for i in range(s):
+                for j in range(h):
+                    h_res.data[i][j] = x.data[i][j] + attn_out.data[i][j]
+
+            # Pre-norm 2
+            n2 = self.layernorm(h_res, w["ln2_g"], w["ln2_b"])
+
+            # FFN
+            ffn_out = self.ffn(n2, w["w1"], w["b1"], w["w2"], w["b2"])
+
+            # Residual
+            out = Tensor.zeros(s, h)
+            for i in range(s):
+                for j in range(h):
+                    out.data[i][j] = h_res.data[i][j] + ffn_out.data[i][j]
+
+            activations.append({
+                'n1': n1, 'attn_out': attn_out, 'h_res': h_res,
+                'n2': n2, 'ffn_out': ffn_out, 'out': out,
+                'Q': Q, 'K': K, 'V': V, 'concat': concat,
+                'attn_weights': head_attn_weights, 'scale': scale,
+                'wq': w["wq"], 'wk': w["wk"],
+                'wv': w["wv"], 'wo': w["wo"],
+                'x_input': x,
+            })
+            x = out
+
+        # Final LayerNorm
+        x_final = self.layernorm(x, self._final_ln_g, self._final_ln_b)
+
+        # Head projection
+        v = self.cfg.vocab_size
+        logits = Tensor.zeros(s, v)
+        for i in range(s):
+            for j in range(v):
+                logits.data[i][j] = sum(
+                    x_final.data[i][d] * self._head.data[d][j]
+                    for d in range(h))
+                logits.data[i][j] += self._head_bias.data[0][j]
+
+        return logits, activations, x_final, ids
+
     def train_step(self, input_ids: List[int],
                     target_ids: List[int]) -> float:
         """完整训练步: 前向 + 反向 + 更新"""
         t0 = time.time()
-        logits = self.forward(input_ids)
+        logits, activations, x_final, ids = self._training_forward(input_ids)
         loss = self._cross_entropy(logits, target_ids)
-        self._backward(logits, target_ids, input_ids)
+        self._backward(logits, target_ids, input_ids, activations, x_final)
         self._update_params()
         self.profiler.record("train_step", time.time() - t0)
         return loss
@@ -874,17 +999,20 @@ class HeteroGPU:
         return total / max(len(targets), 1)
 
     def _backward(self, logits: Tensor, targets: List[int],
-                   input_ids: List[int]):
-        """反向传播
+                   input_ids: List[int], activations: list = None,
+                   x_final: Tensor = None):
+        """完整反向传播"""
+        if activations is None:
+            # Fallback to old behavior
+            self._backward_legacy(logits, targets, input_ids)
+            return
 
-        计算所有可训练参数的梯度。
-        """
         clip = self.cfg.grad_clip
         s = logits.rows
         v = self.cfg.vocab_size
         h = self.cfg.hidden_dim
 
-        # ---- 1. Loss → logits grad ----
+        # ---- 1. Loss -> logits grad ----
         logits_grad = Tensor.zeros(s, v)
         for t in range(min(len(targets), s)):
             row = logits.data[t]
@@ -895,34 +1023,181 @@ class HeteroGPU:
                 prob = math.exp(row[j] - mx) / sm
                 logits_grad.data[t][j] = (prob - (1.0 if j == tid else 0.0)) / s
 
-        # ---- 2. head grad ----
-        # 需要最后一次 layernorm 的输出 x_final
-        # 这里简化：假设最后一层输出已存在
-        # 实际应缓存所有中间激活
-
-        # head weight grad
+        # ---- 2. Head weight grad ----
         for i in range(h):
             for j in range(v):
                 if self._head._grad:
-                    self._head._grad[i][j] += clip_grad(
-                        sum(logits_grad.data[t][j] for t in range(s)), clip)
-        # head bias grad
+                    g = sum(logits_grad.data[t][j] * x_final.data[t][i]
+                            for t in range(s))
+                    self._head._grad[i][j] += clip_grad(g, clip)
+
+        # Head bias grad
         if self._head_bias._grad:
             for j in range(v):
                 self._head_bias._grad[0][j] += clip_grad(
                     sum(logits_grad.data[t][j] for t in range(s)), clip)
 
-        # ---- 3. FFN backward (最后一层) ----
-        # 简化：对嵌入做粗糙更新
+        # logits grad -> x_final grad
+        logits_grad_to_x = Tensor.zeros(s, h)
+        for i in range(s):
+            for j in range(h):
+                g = 0.0
+                for k in range(v):
+                    g += logits_grad.data[i][k] * self._head.data[j][k]
+                logits_grad_to_x.data[i][j] = g
+
+        # ---- 3. Final LayerNorm backward ----
+        ln_ctx = x_final._ln_context
+        dx = self._layernorm_backward(logits_grad_to_x, ln_ctx)
+
+        # ---- 4. Per-layer backward (reverse order) ----
+        for l in range(len(activations) - 1, -1, -1):
+            act = activations[l]
+            w = self._layers[l]
+
+            # FFN backward: d_ffn_out = dx (from residual 2: out = h_res + ffn_out)
+            d_ffn_out = Tensor.zeros(s, h)
+            for i in range(s):
+                for j in range(h):
+                    d_ffn_out.data[i][j] = dx.data[i][j]
+
+            # FFN backward returns d_n2 (grad w.r.t. n2, input to FFN)
+            d_n2 = self._ffn_backward(d_ffn_out, act['ffn_out']._ffn_ctx)
+
+            # LN2 backward: d_n2 -> d_h_res_from_ln2 (grad w.r.t. h_res, input to LN2)
+            n2_ctx = act['n2']._ln_context
+            d_h_res_from_ln2 = self._layernorm_backward(d_n2, n2_ctx)
+
+            # Total d_h_res = dx (residual 2) + d_h_res_from_ln2 (through FFN->LN2)
+            d_h_res = Tensor.zeros(s, h)
+            for i in range(s):
+                for j in range(h):
+                    d_h_res.data[i][j] = dx.data[i][j] + d_h_res_from_ln2.data[i][j]
+
+            # d_attn_out = d_h_res (residual 1: h_res = x + attn_out)
+            d_attn_out = Tensor.zeros(s, h)
+            for i in range(s):
+                for j in range(h):
+                    d_attn_out.data[i][j] = d_h_res.data[i][j]
+
+            # Output projection backward
+            # d_concat = d_attn_out @ wo^T
+            d_concat = Tensor.zeros(s, h)
+            wo = act['wo']
+            for i in range(s):
+                for j in range(h):
+                    g = 0.0
+                    for k in range(h):
+                        g += d_attn_out.data[i][k] * wo.data[j][k]
+                    d_concat.data[i][j] = g
+
+            # wo grad
+            if wo._grad:
+                for m in range(h):
+                    for j in range(h):
+                        g = sum(d_attn_out.data[i][j] * act['concat'].data[i][m]
+                                for i in range(s))
+                        wo._grad[m][j] += clip_grad(g, clip)
+
+            # Per-head attention backward
+            nh = self.cfg.num_heads
+            hd = self.cfg.head_dim
+            scale = act['scale']
+            d_Q = Tensor.zeros(s, h)
+            d_K = Tensor.zeros(s, h)
+            d_V = Tensor.zeros(s, h)
+
+            for hh in range(nh):
+                attn_w = act['attn_weights'][hh]
+                Q = act['Q']
+                K = act['K']
+                V = act['V']
+
+                for qi in range(s):
+                    # d_V: gradient accumulates at key positions
+                    for ki in range(qi + 1):
+                        w_val = attn_w[qi][ki]
+                        for d in range(hd):
+                            d_V.data[ki][hh * hd + d] += (
+                                w_val * d_concat.data[qi][hh * hd + d])
+
+                    # d_attn_weights -> d_scores
+                    d_scores = [0.0] * (qi + 1)
+                    for ki in range(qi + 1):
+                        for d in range(hd):
+                            d_scores[ki] += d_concat.data[qi][hh * hd + d] * \
+                                V.data[ki][hh * hd + d]
+
+                    # softmax backward: d_score[j] = w[j] * (d_scores[j] - sum(w*k * d_scores[k]))
+                    ws = attn_w[qi]
+                    wsum = sum(ws[k] * d_scores[k] for k in range(qi + 1))
+                    for ki in range(qi + 1):
+                        d_sc = ws[ki] * (d_scores[ki] - wsum)
+
+                        # d_Q and d_K
+                        for d in range(hd):
+                            d_Q.data[qi][hh * hd + d] += d_sc * K.data[ki][hh * hd + d]
+                            d_K.data[ki][hh * hd + d] += d_sc * Q.data[qi][hh * hd + d]
+
+            # Q/K/V weight grads
+            for wname, dval in [("wq", d_Q), ("wk", d_K), ("wv", d_V)]:
+                wt = act[wname]
+                if wt._grad:
+                    for m in range(h):
+                        for j in range(h):
+                            g = sum(dval.data[i][j] * act['n1'].data[i][m]
+                                    for i in range(s))
+                            wt._grad[m][j] += clip_grad(g, clip)
+
+            # LayerNorm 1 backward — use returned dx
+            n1_ctx = act['n1']._ln_context
+            d_n1_input = Tensor.zeros(s, h)
+            for i in range(s):
+                for j in range(h):
+                    d_n1_input.data[i][j] = d_Q.data[i][j] + d_K.data[i][j] + d_V.data[i][j]
+
+            d_ln1_x = self._layernorm_backward(d_n1_input, n1_ctx)
+
+            # dx for next layer = d_ln1_x (through LN1) + d_h_res (residual)
+            for i in range(s):
+                for j in range(h):
+                    dx.data[i][j] = d_ln1_x.data[i][j] + d_h_res.data[i][j]
+
+        # ---- 5. Embedding grad ----
         for i, tid in enumerate(input_ids[:s]):
-            if i >= logits.rows:
-                break
             tid = tid % v
-            grad_mag = sum(abs(logits_grad.data[i][j]) for j in range(v)) / v
             if self._embed._grad:
                 for j in range(h):
                     self._embed._grad[tid][j] += clip_grad(
-                        grad_mag * 0.01 * (random.random() - 0.5), clip)
+                        dx.data[i][j], clip)
+
+    def _backward_legacy(self, logits: Tensor, targets: List[int],
+                          input_ids: List[int]):
+        """Legacy backward (fallback)"""
+        clip = self.cfg.grad_clip
+        s = logits.rows
+        v = self.cfg.vocab_size
+        h = self.cfg.hidden_dim
+
+        logits_grad = Tensor.zeros(s, v)
+        for t in range(min(len(targets), s)):
+            row = logits.data[t]
+            mx = max(row)
+            sm = sum(math.exp(r - mx) for r in row)
+            tid = targets[t] % v
+            for j in range(v):
+                prob = math.exp(row[j] - mx) / sm
+                logits_grad.data[t][j] = (prob - (1.0 if j == tid else 0.0)) / s
+
+        for i in range(h):
+            for j in range(v):
+                if self._head._grad:
+                    self._head._grad[i][j] += clip_grad(
+                        sum(logits_grad.data[t][j] for t in range(s)), clip)
+        if self._head_bias._grad:
+            for j in range(v):
+                self._head_bias._grad[0][j] += clip_grad(
+                    sum(logits_grad.data[t][j] for t in range(s)), clip)
 
     def _update_params(self):
         """梯度更新"""

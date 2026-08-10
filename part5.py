@@ -793,8 +793,9 @@ class LingyuanOrchestrator:
                 from part17 import VirtualGPU
                 self.virtual_gpu = VirtualGPU()
                 self.virtual_gpu.warmup()
-            except Exception:
-                pass
+            except Exception as e:
+                import warnings
+                warnings.warn(f"Module load failed: {e}", RuntimeWarning)
         return self.virtual_gpu
 
     @property
@@ -804,8 +805,9 @@ class LingyuanOrchestrator:
             try:
                 from part18 import GPUAcceleratedTrainingEngine
                 self._gpu_training_engine = GPUAcceleratedTrainingEngine(self.transformer_model)
-            except Exception:
-                pass
+            except Exception as e:
+                import warnings
+                warnings.warn(f"Module load failed: {e}", RuntimeWarning)
         return self._gpu_training_engine
 
     @property
@@ -816,8 +818,9 @@ class LingyuanOrchestrator:
                 from part19 import MoETransformerModel, MoEConfig
                 config = MoEConfig.from_preset("tiny_moe")
                 self._moe_model = MoETransformerModel(config)
-            except Exception:
-                pass
+            except Exception as e:
+                import warnings
+                warnings.warn(f"Module load failed: {e}", RuntimeWarning)
         return self._moe_model
 
     @property
@@ -827,8 +830,9 @@ class LingyuanOrchestrator:
             try:
                 from part20 import DataPipeline, DataAugmentor, SmartBatcher
                 self._data_factory = DataPipeline()
-            except Exception:
-                pass
+            except Exception as e:
+                import warnings
+                warnings.warn(f"Module load failed: {e}", RuntimeWarning)
         return self._data_factory
 
     @property
@@ -838,8 +842,9 @@ class LingyuanOrchestrator:
             try:
                 from part21 import AutoMLPipeline, NeuralArchitectureSearch
                 self._auto_ml = AutoMLPipeline()
-            except Exception:
-                pass
+            except Exception as e:
+                import warnings
+                warnings.warn(f"Module load failed: {e}", RuntimeWarning)
         return self._auto_ml
 
     @property
@@ -849,8 +854,9 @@ class LingyuanOrchestrator:
             try:
                 from part22 import InferenceServer, DistributedInferenceEngine as InfEng
                 self._inference_server = InferenceServer()
-            except Exception:
-                pass
+            except Exception as e:
+                import warnings
+                warnings.warn(f"Module load failed: {e}", RuntimeWarning)
         return self._inference_server
 
     # ===== Part 23-28 延迟加载属性 =====
@@ -862,8 +868,9 @@ class LingyuanOrchestrator:
             try:
                 from part23 import MobileInferenceOptimizer
                 self._quantization_engine = MobileInferenceOptimizer()
-            except Exception:
-                pass
+            except Exception as e:
+                import warnings
+                warnings.warn(f"Module load failed: {e}", RuntimeWarning)
         return self._quantization_engine
 
     @property
@@ -873,8 +880,9 @@ class LingyuanOrchestrator:
             try:
                 from part24 import MultimodalFusionModel, MultimodalConfig
                 self._multimodal_fusion = MultimodalFusionModel()
-            except Exception:
-                pass
+            except Exception as e:
+                import warnings
+                warnings.warn(f"Module load failed: {e}", RuntimeWarning)
         return self._multimodal_fusion
 
     @property
@@ -884,8 +892,9 @@ class LingyuanOrchestrator:
             try:
                 from part25 import RAGEngine
                 self._knowledge_graph_system = RAGEngine()
-            except Exception:
-                pass
+            except Exception as e:
+                import warnings
+                warnings.warn(f"Module load failed: {e}", RuntimeWarning)
         return self._knowledge_graph_system
 
     @property
@@ -896,8 +905,9 @@ class LingyuanOrchestrator:
                 from part26 import AdaptiveLearningSystem, create_python_curriculum
                 self._adaptive_learning = AdaptiveLearningSystem()
                 self._adaptive_learning.build_curriculum(create_python_curriculum())
-            except Exception:
-                pass
+            except Exception as e:
+                import warnings
+                warnings.warn(f"Module load failed: {e}", RuntimeWarning)
         return self._adaptive_learning
 
     @property
@@ -907,8 +917,9 @@ class LingyuanOrchestrator:
             try:
                 from part27 import SecuritySandboxSystem
                 self._security_sandbox = SecuritySandboxSystem()
-            except Exception:
-                pass
+            except Exception as e:
+                import warnings
+                warnings.warn(f"Module load failed: {e}", RuntimeWarning)
         return self._security_sandbox
 
     @property
@@ -922,8 +933,9 @@ class LingyuanOrchestrator:
                     self._edge_deployment.register_device(device)
                 model = create_preset_model()
                 self._edge_deployment.register_model(model)
-            except Exception:
-                pass
+            except Exception as e:
+                import warnings
+                warnings.warn(f"Module load failed: {e}", RuntimeWarning)
         return self._edge_deployment
 
     # ===== Part 29 延迟加载属性 =====
@@ -946,8 +958,9 @@ class LingyuanOrchestrator:
             try:
                 from part29 import LingyuanTriArchModel, TriArchConfig
                 self._tri_arch_model = LingyuanTriArchModel()
-            except Exception:
-                pass
+            except Exception as e:
+                import warnings
+                warnings.warn(f"Module load failed: {e}", RuntimeWarning)
         return self._tri_arch_model
 
     def _register_initial_model(self):

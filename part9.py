@@ -704,11 +704,11 @@ class PositionalEncoding:
             return []
         n = 2 ** int(math.floor(math.log2(num_heads)))
         base = 2.0 ** (-8.0 / n)
-        slopes = [base ** (i + 1) for i in range(n)]
+        slopes = [-(base ** (i + 1)) for i in range(n)]
         if n < num_heads:
             extra_base = 2.0 ** (-8.0 / (2 * n))
             for i in range(num_heads - n):
-                slopes.append(extra_base ** (2 * i + 1))
+                slopes.append(-(extra_base ** (2 * i + 1)))
         return slopes[:num_heads]
 
     def get_alibi_bias(self, seq_len: int,
@@ -731,7 +731,7 @@ class PositionalEncoding:
             for i in range(seq_len):
                 row = [0.0] * seq_len
                 for j in range(i):
-                    row[j] = -slope * (i - j)
+                    row[j] = slope * (i - j)
                 head_bias.append(row)
             bias.append(head_bias)
         return bias
@@ -1592,6 +1592,14 @@ class LingyuanTransformerModel:
             attn_weights_all: List[List[List[float]]] = []
             out_heads: List[List[List[float]]] = []
 
+            # ALiBi slopes for this layer's attention
+            alibi_slopes = None
+            if attn._alibi_slopes is not None and attn.positional_encoding:
+                alibi_slopes = attn._alibi_slopes
+
+            # Sliding window (match inference)
+            sw = attn.sliding_window
+
             for h_idx in range(num_heads):
                 q_h = Q_heads_rot[h_idx]
                 # GQA: 对应的KV头索引
@@ -1599,25 +1607,47 @@ class LingyuanTransformerModel:
                 k_h = K_heads_rot[kv_idx] if use_rope else K_heads[kv_idx]
                 v_h = V_heads[kv_idx]
 
+                # ALiBi slope for this head
+                alibi_slope = 0.0
+                if alibi_slopes is not None:
+                    alibi_slope = alibi_slopes[h_idx % len(alibi_slopes)]
+
                 # 计算注意力分数
                 scores_h: List[List[float]] = []
                 for qi in range(seq_len):
-                    row_s = [0.0] * seq_len
+                    row_s = [-1e9] * seq_len  # -inf for masked positions
                     qv = q_h[qi]
                     for ki in range(qi + 1):  # 因果: 只看 ki <= qi
+                        # 滑动窗口: ki >= qi - sw
+                        if sw > 0 and ki < qi - sw:
+                            continue  # keep -1e9
                         s_val = 0.0
                         kv = k_h[ki]
                         for d in range(head_dim):
                             s_val += qv[d] * kv[d]
                         row_s[ki] = s_val * scale
+                        # ALiBi偏置 (与推理前向一致)
+                        if alibi_slope:
+                            row_s[ki] += alibi_slope * (qi - ki)
                     scores_h.append(row_s)
 
-                # Softmax (只对有效位置)
+                # Softmax (handle -1e9 masked values)
                 attn_w_h = []
                 for qi in range(seq_len):
-                    valid_scores = scores_h[qi][:qi + 1]
+                    # Collect valid (non-masked) scores
+                    valid_scores = []
+                    valid_idx = []
+                    for ki in range(seq_len):
+                        if scores_h[qi][ki] > -1e8:
+                            valid_scores.append(scores_h[qi][ki])
+                            valid_idx.append(ki)
+                    if not valid_scores:
+                        valid_scores = [0.0]
+                        valid_idx = [qi]
                     probs = _softmax_vec(valid_scores)
-                    full_probs = probs + [0.0] * (seq_len - qi - 1)
+                    full_probs = [0.0] * seq_len
+                    for idx, ki in enumerate(valid_idx):
+                        full_probs[ki] = probs[idx]
                     attn_w_h.append(full_probs)
                 attn_weights_all.append(attn_w_h)
 
