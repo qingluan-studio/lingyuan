@@ -1,0 +1,21 @@
+{
+  "path": "/data/user/work/lingyuan/lingyuan_enterprise_data/checkpoints/ckpt_epoch0004_step000020_20260810_080627.het",
+  "epoch": 4,
+  "step": 20,
+  "loss": 3.349062122116398,
+  "timestamp": "20260810_080627",
+  "config": {
+    "vocab_size": 128,
+    "hidden_dim": 32,
+    "num_heads": 2,
+    "num_layers": 2,
+    "ffn_dim": 64,
+    "max_seq_len": 64,
+    "cache_size": 500,
+    "sparse_top_k_ratio": 0.3,
+    "oracle_confidence": 0.8,
+    "learning_rate": 0.001,
+    "grad_clip": 1.0,
+    "dropout": 0.0
+  }
+}

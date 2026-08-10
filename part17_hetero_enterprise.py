@@ -1274,7 +1274,7 @@ class HeteroGPU:
                     f.write(struct.pack('!II', t.rows, t.cols))
                     for row in t.data:
                         for v in row:
-                            f.write(struct.pack('!f', v))
+                            f.write(struct.pack('!d', v))
         except IOError as e:
             raise CheckpointError(f"保存失败: {e}")
 
@@ -1308,7 +1308,7 @@ class HeteroGPU:
                             f"Shape mismatch: file ({rows},{cols}) != "
                             f"expected ({t.rows},{t.cols})")
                     for i in range(rows):
-                        row = [struct.unpack('!f', f.read(4))[0]
+                        row = [struct.unpack('!d', f.read(8))[0]
                                for _ in range(cols)]
                         t.data[i] = row
 
