@@ -519,7 +519,7 @@ class TrainingEngine:
             "epochs_completed": min(epoch + 1, epochs),
             "total_steps": self.current_step,
             "total_time": f"{total_time:.1f}s",
-            "best_loss": f"{self.best_loss:.4f}",
+            "best_loss": self.best_loss,
             "metrics": self.metrics_history,
         }
 
