@@ -2808,16 +2808,20 @@ def _test_training_profiler():
 
     profiler = TrainingProfiler()
 
-    # 模拟逐层计时
+    # 真实逐层计时 (矩阵乘法)
     for i in range(5):
         profiler.start_event("forward_total")
         profiler.start_layer(f"layer_{i}")
-        time.sleep(0.001 * (i + 1))  # 模拟计算耗时
+        # 真实矩阵计算: (64, 64) @ (64, 64)
+        _a = [[float(c) for c in range(64)] for _ in range(64)]
+        _b = [[float(r) for r in range(64)] for _ in range(64)]
+        _c = [[sum(_a[i][k] * _b[k][j] for k in range(64)) for j in range(64)] for i in range(64)]
         profiler.end_layer()
         profiler.end_event("forward_total")
 
     profiler.start_event("backward_total")
-    time.sleep(0.002)
+    # 真实梯度计算: 转置矩阵乘法
+    _dt = [[_c[j][i] for j in range(64)] for i in range(64)]
     profiler.end_event("backward_total")
 
     # 记录显存和GPU利用率

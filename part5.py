@@ -1104,18 +1104,50 @@ class LingyuanOrchestrator:
             # 从供应商获取GPU状态
             vendors = self.infra.scheduler.get_all_vendors() if hasattr(self.infra.scheduler, 'get_all_vendors') else []
 
+            # 基于实际指标确定性计算系统状态 (非随机)
+            remaining_vram = max(0, 80 - energy.get("total_energy_kwh", 0) * 0.5)
+            consumption_rate = 1.0 + len(vendors) * 0.1
+            actual_gen_rate = 1.0
+
+            # 从推理引擎获取实际待处理请求队列 (尽力而为)
+            pending_requests = []
+            _ie = getattr(self, "inference_engine", None)
+            if _ie is not None and hasattr(_ie, "get_pending_requests"):
+                try:
+                    pending_requests = list(_ie.get_pending_requests() or [])
+                except Exception:
+                    pending_requests = []
+
+            # swap_ratio: 消耗速率与生成速率的比值 (内存压力代理指标, 1.0=平衡)
+            swap_ratio = round(consumption_rate / max(actual_gen_rate, 0.01), 2)
+
+            # vram_decline: 单次快照无历史基线, 衰减率为0.0
+            vram_decline = 0.0
+
+            # slo_urgency: 综合VRAM压力、生成赤字与待处理请求数
+            vram_pressure = max(0.0, 1.0 - remaining_vram / 80.0)
+            gen_deficit = max(0.0, consumption_rate - actual_gen_rate) / max(consumption_rate, 0.01)
+            queue_factor = min(0.3, len(pending_requests) / 100.0)
+            slo_urgency = round(min(1.0, max(0.0, 0.3 + vram_pressure * 0.3 + gen_deficit * 0.2 + queue_factor)), 2)
+
+            # kv_hit_rate: 缓存命中率基线 (确定性)
+            kv_hit_rate = 0.75
+
+            # fragmentation: 基于VRAM压力估算的碎片率
+            fragmentation = round(min(0.25, 0.03 + vram_pressure * 0.2), 4)
+
             system_state = {
-                "remaining_vram": max(0, 80 - energy.get("total_energy_kwh", 0) * 0.5),
-                "consumption_rate": 1.0 + len(vendors) * 0.1,
-                "actual_gen_rate": 1.0,
-                "kv_hit_rate": 0.75 + random.uniform(-0.1, 0.1),
-                "seq_length": random.choice([256, 512, 1024, 2048]),
-                "batch_size": random.choice([1, 2, 4, 8]),
-                "fragmentation": round(random.uniform(0.03, 0.20), 4),
-                "swap_ratio": round(random.uniform(0.8, 2.5), 2),
-                "vram_decline": round(random.uniform(0.0, 0.8), 4),
-                "requests": [],
-                "slo_urgency": round(random.uniform(0.3, 0.8), 2),
+                "remaining_vram": remaining_vram,
+                "consumption_rate": consumption_rate,
+                "actual_gen_rate": actual_gen_rate,
+                "kv_hit_rate": kv_hit_rate,
+                "seq_length": 1024,
+                "batch_size": 4,
+                "fragmentation": fragmentation,
+                "swap_ratio": swap_ratio,
+                "vram_decline": vram_decline,
+                "requests": pending_requests,
+                "slo_urgency": slo_urgency,
             }
 
         print(f"\n[融合引擎] 执行六层级决策...")
@@ -2606,7 +2638,11 @@ class LingyuanTestSuite:
         # 训练监控
         orch.training_monitor.start_monitoring("test_run", total_steps=100)
         orch.training_monitor.record("test_run", step=1, metrics={"loss": 0.5, "learning_rate": 0.01})
-        self._assert("训练监控-记录", True, "")
+        # 检查监控数据是否真正被记录
+        _mon = orch.training_monitor._monitors.get("test_run")
+        _monitor_data = _mon["metrics"] if _mon else {}
+        self._assert("训练监控-记录", _monitor_data is not None and len(_monitor_data) > 0,
+                     f"监控数据: {len(_monitor_data)} 项指标")
         # 模型对比
         orch.model_comparator.register_model("model_a", "灵元-A", {"accuracy": 0.9})
         orch.model_comparator.register_model("model_b", "灵元-B", {"accuracy": 0.85})
@@ -2639,7 +2675,14 @@ class LingyuanTestSuite:
         # 血缘审计
         orch.provenance_auditor.add_data_record(
             source="github/repo", license="MIT", desensitized=True, version="v1.0")
-        self._assert("血缘审计-记录", True, "")
+        # 检查数据血缘记录是否真正被添加
+        if hasattr(orch.provenance_auditor, 'list_records'):
+            _records = orch.provenance_auditor.list_records()
+        elif hasattr(orch.provenance_auditor, 'records'):
+            _records = orch.provenance_auditor.records
+        else:
+            _records = orch.provenance_auditor._data_records
+        self._assert("血缘审计-记录", len(_records) > 0, f"记录数: {len(_records)}")
 
     def test_end_to_end(self, orch: LingyuanOrchestrator):
         """端到端集成测试"""

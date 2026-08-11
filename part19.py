@@ -2818,7 +2818,8 @@ class MoETrainingEngine:
                 if initial_loss is None:
                     initial_loss = info["loss"]
                 if verbose and self.global_step % max(1, len(data)) == 0:
-                    pass
+                    avg_loss = sum(self.loss_history[-len(data):]) / max(len(data), 1) if self.loss_history else 0.0
+                    print(f"  [Step {self.global_step}] avg_loss={avg_loss:.4f}", flush=True)
         final_loss = self.loss_history[-1] if self.loss_history else 0.0
         return {
             "epochs": epochs,

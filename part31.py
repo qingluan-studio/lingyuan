@@ -39,6 +39,11 @@ from enum import Enum
 from typing import Dict, List, Optional, Any, Tuple, Callable, Set
 from datetime import datetime
 
+# 真实本地推理模型 (灵元 V7.0 ULTRA, 纯Python标准库实现)
+import sys as _sys
+_sys.path.insert(0, "/workspace/lingyuan_train")
+from lingyuan_v7 import LingyuanModel, ModelConfig, CharTokenizer, BUILTIN_CORPUS
+
 
 # ============================================================
 # 枚举定义
@@ -372,8 +377,7 @@ class VirtualUser:
 
         template = random.choice(templates.get(req_type, templates[RequestType.CHAT]))
         filled = template
-        for key in set(c for c in template if c == "{"):
-            pass
+        brace_count = sum(1 for c in template if c == "{")
         import re
         placeholders = re.findall(r'\{(\w)\}', template)
         for ph in placeholders:
@@ -570,6 +574,10 @@ class InferenceAdapter:
     收集原始 InferenceResult 转换成虚拟用户理解的格式。
     """
 
+    # 本地推理模型缓存 (懒加载, 类级别共享, 线程安全)
+    _local_model_cache = None
+    _local_model_lock = threading.Lock()
+
     def __init__(self, engine: Any = None):
         """engine: DistributedInferenceEngine (part22) 或兼容接口"""
         self.engine = engine
@@ -577,7 +585,7 @@ class InferenceAdapter:
         self._lock = threading.Lock()
         self._request_counter = 0
 
-        # 模拟模式 (无真实引擎时)
+        # 本地推理回退模式 (无外部引擎时使用真实本地模型)
         self._simulate_results: deque = deque(maxlen=1000)
         self._simulate_mode = engine is None
 
@@ -590,7 +598,7 @@ class InferenceAdapter:
         返回 InferenceResult 或 None (模拟模式)
         """
         if self._simulate_mode:
-            return self._simulate(prompt, max_tokens, user_type, request_type)
+            return self._local_inference(prompt, max_tokens, user_type, request_type)
 
         # 真实引擎模式: 构造 part22 InferenceRequest
         try:
@@ -621,31 +629,73 @@ class InferenceAdapter:
             result = self.engine.infer(req)
             return result
         except ImportError:
-            return self._simulate(prompt, max_tokens, user_type, request_type)
+            return self._local_inference(prompt, max_tokens, user_type, request_type)
 
-    def _simulate(self, prompt: str, max_tokens: int,
-                  user_type: str, request_type: str) -> Any:
-        """模拟推理结果"""
-        sim_latency = (
-            50.0 if user_type == "spammer" else
-            random.uniform(50, 500) + len(prompt) * 0.5
-        )
-        time.sleep(sim_latency / 1000.0)  # 模拟延迟
+    def _get_local_model(self):
+        """懒加载并缓存本地 LingyuanModel (线程安全, 类级别共享)
 
-        class SimResult:
-            request_id = f"sim-{random.randint(0, 99999)}"
-            text = f"[{request_type}] 回应: {prompt[:30]}..."
-            token_ids = list(range(max(1, max_tokens // 10)))
-            prompt_tokens = len(prompt.split())
-            completion_tokens = max(1, max_tokens // 10)
-            latency_ms = sim_latency
-            finish_reason = "stop"
+        使用 tiny 配置 (vocab=256, hidden=32, 2层) 的真实模型,
+        CharTokenizer 基于 BUILTIN_CORPUS 构建。仅在首次调用时初始化,
+        后续复用同一实例, 避免重复构建开销。
+        """
+        if InferenceAdapter._local_model_cache is None:
+            with InferenceAdapter._local_model_lock:
+                if InferenceAdapter._local_model_cache is None:
+                    cfg = ModelConfig.tiny()
+                    tokenizer = CharTokenizer(vocab_size=cfg.vocab_size)
+                    tokenizer.fit_on_text(BUILTIN_CORPUS)
+                    model = LingyuanModel(cfg)
+                    InferenceAdapter._local_model_cache = (model, tokenizer, cfg)
+        return InferenceAdapter._local_model_cache
+
+    def _local_inference(self, prompt: str, max_tokens: int,
+                         user_type: str, request_type: str) -> Any:
+        """本地真实推理 — 基于 LingyuanModel 生成实际输出
+
+        使用缓存的 tiny 模型对 prompt 做真实自回归生成,
+        并用 time.time() 测量实际推理延迟 (非模拟)。
+        """
+        model, tokenizer, cfg = self._get_local_model()
+
+        # 编码 prompt (截断到模型最大序列长度, 与 generate 内部一致)
+        max_seq = cfg.max_seq_len
+        prompt_ids = tokenizer.encode(prompt)[:max_seq]
+        if not prompt_ids:
+            prompt_ids = [tokenizer.char2id.get("<BOS>", 2)]
+
+        # 真实生成 (限制 max_new 以保证响应速度)
+        gen_new = min(max(1, max_tokens), 8)
+        t0 = time.time()
+        out_ids = model.generate(prompt_ids, max_new=gen_new,
+                                 temperature=0.7, top_k=0)
+        latency_ms = (time.time() - t0) * 1000.0
+
+        gen_ids = out_ids[len(prompt_ids):]
+        text = tokenizer.decode(gen_ids)
+
+        with self._lock:
+            self._request_counter += 1
+            req_id = f"local-{self._request_counter}"
+
+        class LocalResult:
+            def __init__(self, request_id, text, token_ids,
+                         prompt_tokens, completion_tokens,
+                         latency_ms, finish_reason):
+                self.request_id = request_id
+                self.text = text
+                self.token_ids = token_ids
+                self.prompt_tokens = prompt_tokens
+                self.completion_tokens = completion_tokens
+                self.latency_ms = latency_ms
+                self.finish_reason = finish_reason
 
             def __repr__(self):
-                return (f"SimResult(tokens={self.completion_tokens}, "
+                return (f"LocalResult(tokens={self.completion_tokens}, "
                         f"latency={self.latency_ms:.0f}ms)")
 
-        return SimResult()
+        finish_reason = "length" if len(gen_ids) >= gen_new else "stop"
+        return LocalResult(req_id, text, gen_ids, len(prompt_ids),
+                           len(gen_ids), latency_ms, finish_reason)
 
 
 # ============================================================

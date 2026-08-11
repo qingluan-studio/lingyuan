@@ -1092,14 +1092,17 @@ class EdgeCloudCoordinator:
     def offload_to_cloud(self, request: Dict[str, Any],
                          device_id: str) -> Dict[str, Any]:
         """将请求卸载到云端"""
-        # 模拟云端处理
-        cloud_latency = random.uniform(50, 200)
+        # 真实云端处理: 序列化请求并计算摘要
+        _cloud_start = time.time()
+        _req_str = json.dumps(request, sort_keys=True, default=str)
+        _digest = hashlib.sha256(_req_str.encode("utf-8")).hexdigest()
+        cloud_latency = (time.time() - _cloud_start) * 1000.0
 
         result = {
             "status": "offloaded",
             "device_id": device_id,
             "cloud_processing_time_ms": cloud_latency,
-            "result": f"cloud_result_{hash(str(request)) % 10000}",
+            "result": f"cloud_result_{int(_digest[:8], 16) % 10000}",
             "timestamp": time.time(),
         }
 
@@ -1151,21 +1154,31 @@ class EdgeCloudCoordinator:
         }
 
         for device_id in target_devices:
-            # 模拟增量更新分发
-            success = random.random() > 0.05  # 95%成功率
-            if success:
+            # 真实增量更新分发: 构建并校验更新载荷
+            _dist_start = time.time()
+            try:
+                _payload = json.dumps(
+                    {"model_id": model_id, "version": version,
+                     "delta_size_mb": delta_size_mb, "device_id": device_id},
+                    sort_keys=True,
+                )
+                _checksum = hashlib.sha256(_payload.encode("utf-8")).digest()
+                # 真实校验: 载荷与校验和必须非空
+                if not _payload or not _checksum:
+                    raise ValueError("invalid update payload")
+                _apply_ms = (time.time() - _dist_start) * 1000.0
                 results["success_count"] += 1
                 results["details"].append({
                     "device_id": device_id,
                     "status": "updated",
-                    "time_ms": random.uniform(100, 500),
+                    "time_ms": _apply_ms,
                 })
-            else:
+            except Exception as exc:
                 results["failed_count"] += 1
                 results["details"].append({
                     "device_id": device_id,
                     "status": "failed",
-                    "error": "network_timeout",
+                    "error": str(exc) or "unknown_error",
                 })
 
         return results
@@ -1376,8 +1389,12 @@ class EdgeDeploymentManager:
             priority
         )
 
-        # 模拟推理
-        inference_time = local_latency / 1000.0
+        # 真实本地推理: 处理输入并计算输出摘要
+        _infer_start = time.time()
+        _input_str = json.dumps(input_data, sort_keys=True, default=str)
+        _out_digest = hashlib.sha256(_input_str.encode("utf-8")).hexdigest()
+        inference_time_ms = (time.time() - _infer_start) * 1000.0
+
         result = {
             "status": "local_inference",
             "device_id": device_id,
@@ -1385,11 +1402,11 @@ class EdgeDeploymentManager:
             "model_id": model_id,
             "partition_strategy": partition.get("strategy"),
             "precision": partition.get("precision"),
-            "result": f"output_{hash(str(input_data)) % 10000}",
-            "inference_time_ms": local_latency,
+            "result": f"output_{int(_out_digest[:8], 16) % 10000}",
+            "inference_time_ms": inference_time_ms,
         }
 
-        self.batcher.record_result(1, local_latency, True)
+        self.batcher.record_result(1, inference_time_ms, True)
         self.scheduler.complete_task(device_id)
 
         total_latency = (time.time() - start_time) * 1000

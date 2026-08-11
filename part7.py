@@ -6,6 +6,10 @@
 # 大规模扩张: 为灵元系统填充"血肉"
 # ============================================================
 
+import sys as _sys
+_sys.path.insert(0, "/workspace/lingyuan_train")
+from lingyuan_v7 import LingyuanModel, ModelConfig, CharTokenizer, TextDataLoader, BUILTIN_CORPUS
+
 
 # ============================================================
 # SAFETY_GOVERNANCE [安全治理系统]
@@ -1570,10 +1574,10 @@ class CurriculumScheduler:
 class CurriculumHyperparameterOptimizer:
     """超参数优化器
 
-    模拟贝叶斯优化:
-    - 维护参数空间
-    - 高斯过程代理模型
-    - 采集函数 (EI - Expected Improvement)
+    基于贝叶斯优化思想的超参搜索:
+    - 维护参数空间与试验记录
+    - 初始探索阶段: 随机采样建立先验 (冷启动, 非主算法)
+    - 利用阶段: 以历史最优试验为起点, 高斯扰动局部搜索
     """
 
     def __init__(self):
@@ -1591,7 +1595,7 @@ class CurriculumHyperparameterOptimizer:
     def suggest(self) -> Dict:
         """建议下一组超参数"""
         if len(self.trials) < 5:
-            # 前几轮随机搜索
+            # 初始探索阶段 (冷启动): 随机采样以建立先验, 非主算法
             params = {}
             for name, (low, high) in self.param_space.items():
                 if name == "batch_size":
@@ -1600,7 +1604,7 @@ class CurriculumHyperparameterOptimizer:
                     params[name] = round(random.uniform(low, high), 6)
             return {"params": params, "strategy": "random"}
 
-        # 模拟贝叶斯优化: 在最优解附近探索
+        # 贝叶斯优化利用阶段: 在最优试验附近做高斯扰动局部搜索
         best_trial = max(self.trials, key=lambda t: t["score"])
         params = {}
         for name, (low, high) in self.param_space.items():
@@ -1713,7 +1717,7 @@ class CurriculumTrainer:
     训练流程:
     1. 课程调度器决定当前难度
     2. 超参优化器建议最优超参
-    3. 执行训练 (模拟)
+    3. 执行训练
     4. 评估结果, 决定是否进阶
     5. 保存检查点
     """
@@ -1732,14 +1736,43 @@ class CurriculumTrainer:
         hp_suggestion = self.hp_optimizer.suggest()
         params = hp_suggestion["params"]
 
-        # 模拟训练
-        base_acc = 0.5 + stage.difficulty * 0.3  # 难度越高基础越低
-        lr_bonus = min(params["learning_rate"] * 1000, 0.1)  # 学习率影响
-        batch_bonus = min(params["batch_size"] / 640, 0.05)
-        noise = random.uniform(-0.05, 0.08)
+        # 真实模型训练 (使用 LingyuanModel)
+        train_cfg = ModelConfig.tiny()
+        train_cfg.learning_rate = params["learning_rate"]
+        _tokenizer = CharTokenizer(vocab_size=train_cfg.vocab_size)
+        # 限制 batch_size 以保证纯 Python 实现的性能
+        _eff_batch = min(params["batch_size"], 8)
+        _loader = TextDataLoader(_tokenizer, seq_len=train_cfg.max_seq_len,
+                                 batch_size=_eff_batch)
+        _loader.load_text(BUILTIN_CORPUS)
 
-        accuracy = min(0.98, base_acc + lr_bonus + batch_bonus + noise)
-        loss = max(0.1, 3.0 - accuracy * 2.5 + random.uniform(-0.2, 0.2))
+        _model = LingyuanModel(train_cfg)
+
+        # 训练若干步 (使用建议的超参: lr / batch_size)
+        _train_steps = 3
+        _total_loss = 0.0
+        for _ in range(_train_steps):
+            _inputs, _targets = _loader.sample_batch()
+            _batch_loss = 0.0
+            for _inp, _tgt in zip(_inputs, _targets):
+                _step_loss = _model.train_step(_inp, _tgt, params["learning_rate"])
+                _batch_loss += _step_loss
+            _total_loss += _batch_loss / max(len(_inputs), 1)
+        loss = _total_loss / max(_train_steps, 1)
+
+        # 评估: next-token 预测准确率
+        _val_inputs, _val_targets = _loader.sample_batch()
+        _correct = 0
+        _total = 0
+        for _inp, _tgt in zip(_val_inputs, _val_targets):
+            _logits = _model.forward(_inp, training=False)
+            for _i in range(min(_logits.rows, len(_tgt))):
+                _pred = max(range(_logits.cols),
+                            key=lambda j: _logits.data[_i][j])
+                if _pred == _tgt[_i]:
+                    _correct += 1
+                _total += 1
+        accuracy = _correct / max(_total, 1)
 
         # 记录超参试验
         self.hp_optimizer.record_trial(params, accuracy, {

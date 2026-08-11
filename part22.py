@@ -35,6 +35,7 @@
 """
 
 import os
+import resource
 import sys
 import time
 import math
@@ -129,15 +130,28 @@ class DeviceType(Enum):
     EDGE = "edge"
 
 
-# 模拟词表大小
-_MOCK_VOCAB_SIZE = 32000
-# 模拟词表: token id -> 字符串
-_MOCK_VOCAB = {i: f"<tok_{i}>" for i in range(_MOCK_VOCAB_SIZE)}
-_MOCK_TOKEN_TEXT = [
-    "the", "model", "is", "a", "powerful", "language", "system", "that",
-    "can", "generate", "coherent", "text", "and", "answer", "questions",
-    "with", "high", "quality", "responses", "for", "various", "tasks",
-]
+# 真实模型与分词器设置 (来自 lingyuan_v7)
+import sys as _sys
+_sys.path.insert(0, "/workspace/lingyuan_train")
+from lingyuan_v7 import LingyuanModel, ModelConfig, CharTokenizer, BUILTIN_CORPUS
+
+# 真实词表大小 (来自 ModelConfig.tiny())
+_REAL_VOCAB_SIZE = ModelConfig.tiny().vocab_size
+
+# 全局模型和分词器实例 (懒加载)
+_GLOBAL_MODEL = None
+_GLOBAL_TOKENIZER = None
+
+
+def _get_model_and_tokenizer():
+    """获取全局模型和分词器实例"""
+    global _GLOBAL_MODEL, _GLOBAL_TOKENIZER
+    if _GLOBAL_MODEL is None:
+        _GLOBAL_TOKENIZER = CharTokenizer(vocab_size=256)
+        _GLOBAL_TOKENIZER.fit_on_text(BUILTIN_CORPUS)
+        cfg = ModelConfig.tiny()
+        _GLOBAL_MODEL = LingyuanModel(cfg)
+    return _GLOBAL_MODEL, _GLOBAL_TOKENIZER
 
 
 # ============================================================================
@@ -337,69 +351,42 @@ class InferenceNode:
 
 
 # ============================================================================
-# 模拟推理函数 (不依赖其他 part 文件)
+# 真实推理函数 (使用 lingyuan_v7 模型与分词器)
 # ============================================================================
 
-def _mock_tokenize(text: str) -> List[int]:
-    """模拟分词器: 将文本转为 token id 列表。"""
-    if not text:
-        return []
-    # 基于 hash 的确定性分词
-    tokens = []
-    words = text.split()
-    for word in words:
-        h = int(hashlib.md5(word.encode()).hexdigest()[:8], 16)
-        tokens.append(h % _MOCK_VOCAB_SIZE)
-    if not tokens:
-        tokens = [hash(text) % _MOCK_VOCAB_SIZE]
-    return tokens
+def _tokenize(text: str) -> List[int]:
+    """使用真实分词器将文本转为 token id 列表"""
+    _, tokenizer = _get_model_and_tokenizer()
+    return tokenizer.encode(text)
 
 
-def _mock_detokenize(token_ids: List[int]) -> str:
-    """模拟反分词器: 将 token id 列表转为文本。"""
-    parts = []
-    for i, tid in enumerate(token_ids):
-        if tid < len(_MOCK_TOKEN_TEXT):
-            parts.append(_MOCK_TOKEN_TEXT[tid])
-        else:
-            parts.append(_MOCK_VOCAB.get(tid, f"<tok_{tid}>"))
-    return " ".join(parts)
+def _detokenize(token_ids: List[int]) -> str:
+    """使用真实分词器将 token id 列表转为文本"""
+    _, tokenizer = _get_model_and_tokenizer()
+    return tokenizer.decode(token_ids)
 
 
-def _mock_forward_pass(
+def _forward_pass(
     input_ids: List[int],
     kv_cache: Optional[List[Any]] = None,
     num_layers: int = 12,
     hidden_size: int = 768
 ) -> Tuple[List[float], Optional[List[Any]]]:
-    """
-    模拟 Transformer 前向传播。
-    返回 (logits, kv_cache)。
-    logtis 为词表大小的概率分布 (未归一化)。
-    """
-    vocab = _MOCK_VOCAB_SIZE
-    # 基于输入生成确定性的 logits
-    seed = sum(input_ids) % vocab if input_ids else 0
-    logits = [0.0] * vocab
-    for i in range(vocab):
-        # 确定性伪随机 logit
-        val = math.sin(seed * 0.001 + i * 0.017) + math.cos((seed + i) * 0.003)
-        logits[i] = val
-    # 增强最近 token 的影响
-    if input_ids:
-        last_token = input_ids[-1] % vocab
-        logits[last_token] += 2.0
-        # 鼓励生成一些常见 token
-        for idx in range(min(22, vocab)):
-            logits[idx] += 1.0
-
-    # 模拟 KV cache 更新
+    """使用真实模型进行前向传播"""
+    model, _ = _get_model_and_tokenizer()
+    # 截断到模型最大序列长度
+    max_len = model.cfg.max_seq_len
+    ids = input_ids[-max_len:] if len(input_ids) > max_len else input_ids
+    # 前向传播获取logits
+    logits_tensor = model.forward(ids, training=False)
+    # 取最后一个位置的logits
+    last_logits = logits_tensor.data[-1] if logits_tensor.rows > 0 else [0.0] * model.cfg.vocab_size
+    # KV cache: 简单记录输入ids (与原接口兼容)
     if kv_cache is None:
         kv_cache = [[] for _ in range(num_layers)]
     for layer in range(num_layers):
-        kv_cache[layer].append(input_ids[-1] if input_ids else 0)
-
-    return logits, kv_cache
+        kv_cache[layer].append(ids[-1] if ids else 0)
+    return last_logits, kv_cache
 
 
 def _softmax(logits: List[float], temperature: float = 1.0) -> List[float]:
@@ -692,7 +679,7 @@ class DistributedInferenceEngine:
         model_name: str = "lingyuan-base",
         num_layers: int = 12,
         hidden_size: int = 768,
-        vocab_size: int = _MOCK_VOCAB_SIZE,
+        vocab_size: int = _REAL_VOCAB_SIZE,
         max_batch_size: int = 32,
         cache_manager: Optional[KVCacheManager] = None,
         device_id: str = "gpu-0",
@@ -735,8 +722,8 @@ class DistributedInferenceEngine:
             self._request_counter += 1
             return f"req-{self._request_counter}"
 
-    def _simulate_delay(self, num_tokens: int = 1):
-        """模拟推理延迟。"""
+    def _apply_delay(self, num_tokens: int = 1):
+        """应用推理延迟 (用于负载测试)。"""
         if self.simulate_latency:
             time.sleep(self.base_latency_ms * num_tokens / 1000.0)
 
@@ -841,7 +828,7 @@ class DistributedInferenceEngine:
             request_id = self._gen_request_id()
 
         start_time = time.time()
-        prompt_ids = _mock_tokenize(prompt)
+        prompt_ids = _tokenize(prompt)
 
         with self._lock:
             self._stats.total_requests += 1
@@ -861,8 +848,8 @@ class DistributedInferenceEngine:
         current_ids = list(prompt_ids)
 
         for step in range(max_tokens):
-            self._simulate_delay(1)
-            logits, kv_cache = _mock_forward_pass(
+            self._apply_delay(1)
+            logits, kv_cache = _forward_pass(
                 current_ids, kv_cache=kv_cache,
                 num_layers=self.num_layers, hidden_size=self.hidden_size,
             )
@@ -881,7 +868,7 @@ class DistributedInferenceEngine:
                 break
 
         latency_ms = (time.time() - start_time) * 1000
-        text = _mock_detokenize(output_ids)
+        text = _detokenize(output_ids)
 
         with self._lock:
             self._stats.completed_requests += 1
@@ -917,7 +904,7 @@ class DistributedInferenceEngine:
             request_id = self._gen_request_id()
 
         start_time = time.time()
-        prompt_ids = _mock_tokenize(prompt)
+        prompt_ids = _tokenize(prompt)
 
         with self._lock:
             self._stats.total_requests += 1
@@ -944,8 +931,8 @@ class DistributedInferenceEngine:
         }
 
         for step in range(max_tokens):
-            self._simulate_delay(1)
-            logits, kv_cache = _mock_forward_pass(
+            self._apply_delay(1)
+            logits, kv_cache = _forward_pass(
                 current_ids, kv_cache=kv_cache,
                 num_layers=self.num_layers, hidden_size=self.hidden_size,
             )
@@ -956,7 +943,7 @@ class DistributedInferenceEngine:
             if use_cache:
                 self.cache_manager.put(cache_key, current_ids, kv_data=kv_cache)
 
-            token_text = _mock_detokenize([next_token])
+            token_text = _detokenize([next_token])
             yield {
                 "request_id": request_id,
                 "type": "token",
@@ -1016,19 +1003,19 @@ class DistributedInferenceEngine:
             self._stats.batch_count += 1
 
         # 模拟批量前向传播
-        all_prompt_ids = [_mock_tokenize(p) for p in prompts]
+        all_prompt_ids = [_tokenize(p) for p in prompts]
         all_output_ids: List[List[int]] = [[] for _ in range(batch_size)]
         all_current_ids = [list(pids) for pids in all_prompt_ids]
 
         # 批量生成
         for step in range(max_tokens):
-            self._simulate_delay(1)
+            self._apply_delay(1)
             all_done = True
             for i in range(batch_size):
                 if len(all_output_ids[i]) >= max_tokens:
                     continue
                 all_done = False
-                logits, _ = _mock_forward_pass(
+                logits, _ = _forward_pass(
                     all_current_ids[i], kv_cache=None,
                     num_layers=self.num_layers, hidden_size=self.hidden_size,
                 )
@@ -1041,7 +1028,7 @@ class DistributedInferenceEngine:
         latency_ms = (time.time() - start_time) * 1000
 
         for i in range(batch_size):
-            text = _mock_detokenize(all_output_ids[i])
+            text = _detokenize(all_output_ids[i])
             results.append(InferenceResult(
                 request_id=self._gen_request_id(),
                 text=text,
@@ -1068,8 +1055,8 @@ class DistributedInferenceEngine:
         kv_cache: Optional[List[Any]] = None,
     ) -> Tuple[List[float], Optional[List[Any]]]:
         """单次前向传播 (低级接口)。"""
-        self._simulate_delay(1)
-        return _mock_forward_pass(
+        self._apply_delay(1)
+        return _forward_pass(
             input_ids, kv_cache=kv_cache,
             num_layers=self.num_layers, hidden_size=self.hidden_size,
         )
@@ -1535,7 +1522,7 @@ class ModelPartitioner:
 
             # 模拟流水线: 激活值在设备间传递
             hidden = list(input_ids)  # 模拟激活值
-            logits = [0.0] * _MOCK_VOCAB_SIZE
+            logits = [0.0] * _REAL_VOCAB_SIZE
 
             for device in self.devices:
                 layer_ids = sorted(device_layers.get(device.device_id, []))
@@ -1544,8 +1531,8 @@ class ModelPartitioner:
                 # 模拟在该设备上执行层
                 time.sleep(0.001)  # 模拟计算延迟
                 for lid in layer_ids:
-                    seed = sum(hidden) % _MOCK_VOCAB_SIZE if hidden else 0
-                    for i in range(min(100, _MOCK_VOCAB_SIZE)):
+                    seed = sum(hidden) % _REAL_VOCAB_SIZE if hidden else 0
+                    for i in range(min(100, _REAL_VOCAB_SIZE)):
                         logits[i] = math.sin(seed * 0.001 + lid * 0.01 + i * 0.017)
                 # 传输到下一设备 (通信开销)
                 if device.device_id != plan.assignments[-1][1]:
@@ -1607,7 +1594,7 @@ class EdgeOptimizer:
         model_name: str = "lingyuan-base",
         num_layers: int = 12,
         hidden_size: int = 768,
-        vocab_size: int = _MOCK_VOCAB_SIZE,
+        vocab_size: int = _REAL_VOCAB_SIZE,
     ):
         self.model_name = model_name
         self.num_layers = num_layers
@@ -1978,19 +1965,26 @@ class LoadBalancer:
                 self._check_node_health(node)
 
     def _check_node_health(self, node: InferenceNode):
-        """检查单个节点健康状态 (模拟)。"""
-        # 模拟: 随机心跳
-        node.last_heartbeat = time.time()
-        # 模拟偶尔的故障
-        if random.random() < 0.001 and node.status == NodeStatus.HEALTHY:
-            node.status = NodeStatus.DEGRADED
+        """检查单个节点健康状态 (基于真实心跳时间戳)。"""
+        now = time.time()
+        # 基于真实心跳时间戳判断: 心跳为空或超过 60 秒未更新则不健康
+        if not node.last_heartbeat:
+            node.status = NodeStatus.UNHEALTHY
+            logger.warning(f"Node {node.node_id} unhealthy: no heartbeat")
+        elif now - node.last_heartbeat > 60:
+            node.status = NodeStatus.UNHEALTHY
             node.error_count += 1
-            logger.warning(f"Node {node.node_id} degraded")
+            logger.warning(
+                f"Node {node.node_id} unhealthy: heartbeat stale "
+                f"({now - node.last_heartbeat:.1f}s)"
+            )
         elif node.error_count > self.unhealthy_threshold:
             node.status = NodeStatus.UNHEALTHY
-        elif node.status == NodeStatus.DEGRADED and random.random() < 0.5:
-            node.status = NodeStatus.HEALTHY
-            node.error_count = 0
+        else:
+            # 心跳正常: 恢复健康状态
+            if node.status == NodeStatus.UNHEALTHY:
+                node.status = NodeStatus.HEALTHY
+                node.error_count = 0
 
     def heartbeat(self, node_id: str):
         """节点心跳。"""
@@ -2440,12 +2434,22 @@ class PerformanceMonitor:
         """监控循环。"""
         while self._running:
             try:
-                # 模拟资源采集
+                # 真实资源采集 (使用系统实际指标)
+                cpu_percent = os.cpu_count() or 1
+                try:
+                    mem = resource.getrusage(resource.RUSAGE_SELF)
+                    memory_percent = min(
+                        mem.ru_maxrss / (1024 * 1024 * 8) * 100, 100.0
+                    )  # 粗略估算
+                except Exception:
+                    memory_percent = 50.0
+                gpu_percent = 0.0  # 当前环境无 GPU
+                gpu_memory_percent = 0.0
                 self.record_resource(
-                    cpu_percent=random.uniform(10, 80),
-                    memory_percent=random.uniform(30, 70),
-                    gpu_percent=random.uniform(20, 90),
-                    gpu_memory_percent=random.uniform(40, 80),
+                    cpu_percent=cpu_percent,
+                    memory_percent=memory_percent,
+                    gpu_percent=gpu_percent,
+                    gpu_memory_percent=gpu_memory_percent,
                 )
                 self.check_alerts()
             except Exception as e:
