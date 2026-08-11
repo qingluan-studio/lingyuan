@@ -1,0 +1,158 @@
+{
+  "project": "灵元 Lingyuan Model",
+  "description": "V7.0 ULTRA + 增强版多数据集训练综合报告",
+  "generated_at": "2026-08-11 04:15:00",
+  "models": [
+    {
+      "name": "Lingyuan V7.0 ULTRA",
+      "version": "7.0.0-ultra",
+      "architecture": "DeepNorm + GQA + MoE + RoPE/ALiBi",
+      "params": 1027968,
+      "config": {
+        "layers": 4,
+        "hidden_dim": 64,
+        "num_heads": 4,
+        "num_kv_heads": 1,
+        "gqa_ratio": 4,
+        "ffn_dim": 256,
+        "num_experts": 4,
+        "num_activated_experts": 2,
+        "max_seq_len": 64,
+        "norm_type": "deepnorm",
+        "ffn_type": "moe",
+        "pos_encoding": "hybrid",
+        "sliding_window": 32,
+        "deepnorm_alpha": 1.6818
+      },
+      "training_phase_1": {
+        "epochs": 10,
+        "steps": 400,
+        "time_seconds": 3273,
+        "first_loss": 6.3358,
+        "last_loss": 6.2209,
+        "best_loss": 6.2209,
+        "improvement_pct": 1.81,
+        "loss_history": [6.3358, 6.3198, 6.2824, 6.2743, 6.2508, 6.2379, 6.2278, 6.2327, 6.2299, 6.2209]
+      },
+      "training_phase_2_resume": {
+        "epochs_completed": 1.5,
+        "steps_completed": 56,
+        "base_lr": 0.005,
+        "lr_schedule": "warmup+cosine",
+        "first_loss": 6.1932,
+        "best_loss": 6.1032,
+        "status": "stopped_by_user",
+        "note": "续训已验证模型加载成功，loss从6.1932降至6.1032"
+      },
+      "model_file": "lingyuan_v7_trained.het",
+      "model_size_bytes": 22351568
+    },
+    {
+      "name": "Enhanced 唐诗",
+      "version": "enhanced_v1",
+      "params": 134000,
+      "dataset": "唐诗 (chinese-poetry)",
+      "training": {
+        "epochs": 12,
+        "steps": 300,
+        "time_seconds": 1835,
+        "first_loss": 3.6972,
+        "last_loss": 2.7059,
+        "best_loss": 2.6472,
+        "improvement_pct": 26.8
+      },
+      "model_file": "model_唐诗_enhanced.het"
+    },
+    {
+      "name": "Enhanced 论语",
+      "version": "enhanced_v1",
+      "params": 134000,
+      "dataset": "论语 (chinese-poetry)",
+      "training": {
+        "epochs": 12,
+        "steps": 300,
+        "time_seconds": 1765,
+        "first_loss": 5.3158,
+        "last_loss": 3.3212,
+        "best_loss": 3.3212,
+        "improvement_pct": 37.5
+      },
+      "model_file": "model_论语_enhanced.het"
+    },
+    {
+      "name": "Enhanced 莎士比亚",
+      "version": "enhanced_v1",
+      "params": 134000,
+      "dataset": "莎士比亚 (karpathy/char-rnn)",
+      "training": {
+        "epochs": 12,
+        "steps": 300,
+        "time_seconds": 1769,
+        "first_loss": 5.3684,
+        "last_loss": 2.8984,
+        "best_loss": 2.8984,
+        "improvement_pct": 46.0
+      },
+      "model_file": "model_莎士比亚_enhanced.het"
+    },
+    {
+      "name": "V2 唐诗",
+      "version": "v2_optimized",
+      "params": 134000,
+      "dataset": "唐诗 (warmup+cosine LR)",
+      "training": {
+        "epochs": 12,
+        "steps": 300,
+        "time_seconds": 1813,
+        "first_loss": 6.2599,
+        "last_loss": 4.7702,
+        "best_loss": 4.7485,
+        "improvement_pct": 23.8
+      }
+    },
+    {
+      "name": "V2 论语",
+      "version": "v2_optimized",
+      "params": 134000,
+      "dataset": "论语 (warmup+cosine LR)",
+      "training": {
+        "epochs": 12,
+        "steps": 300,
+        "time_seconds": 1755,
+        "first_loss": 6.2537,
+        "last_loss": 5.6117,
+        "best_loss": 5.5994,
+        "improvement_pct": 10.3
+      }
+    },
+    {
+      "name": "V2 莎士比亚",
+      "version": "v2_optimized",
+      "params": 134000,
+      "dataset": "莎士比亚 (warmup+cosine LR)",
+      "training": {
+        "epochs": 12,
+        "steps": 300,
+        "time_seconds": 1743,
+        "first_loss": 6.2311,
+        "last_loss": 5.1373,
+        "best_loss": 5.0990,
+        "improvement_pct": 17.6
+      }
+    }
+  ],
+  "summary": {
+    "total_models_trained": 7,
+    "total_training_time_hours": 4.1,
+    "total_params_max": 1027968,
+    "best_loss_v7": 6.1032,
+    "best_loss_enhanced": 2.6472,
+    "best_improvement_pct": 46.0,
+    "training_stages": [
+      "V1 基础训练 (33K参数, 256词表)",
+      "V2 优化训练 (134K参数, warmup+cosine LR)",
+      "Enhanced 增强训练 (134K参数, 512词表, 64维)",
+      "V7.0 ULTRA (1M参数, DeepNorm+GQA+MoE+RoPE/ALiBi)"
+    ]
+  }
+}

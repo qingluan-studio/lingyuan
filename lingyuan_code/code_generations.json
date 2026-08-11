@@ -1,0 +1,18 @@
+[
+  {
+    "prompt": "def fibonacci(n):\n    ",
+    "generated": "def fibonacci(n):\n    n\"<UNK>[<UNK>n<UNK><UNK>&<UNK>iko<UNK><UNK><UNK><<UNK>[<UNK><UNK><UNK><UNK><UNK><UNK>aehX\"u<UNK>B/<UNK><UNK><UNK><UNK><UNK><UNK><UNK>]<UNK><UNK>@<UNK>(<UNK>"
+  },
+  {
+    "prompt": "def binary_search(arr, target):\n    ",
+    "generated": "def binary_search(arr, target):\n    <UNK>r<UNK><UNK><UNK>n<UNK><UNK>试n<UNK>ss[<UNK>d}<UNK><UNK>: <UNK>\n nn<UNK><PAD>C<UNK>F<UNK>N<UNK><UNK><UNK>.F<UNK>误\\ 误<UNK><UNK>)<UNK>f"
+  },
+  {
+    "prompt": "def is_prime(n):\n    ",
+    "generated": "def is_prime(n):\n    <UNK><UNK><BOS><UNK><UNK>y<UNK>zl<UNK>i<UNK><UNK>\nN<UNK><UNK><UNK>mDs<UNK>+<UNK><PAD><UNK>ntoo]<UNK>3<UNK><UNK>oox<UNK><UNK><UNK><UNK><UNK><UNK>V<UNK><UNK><UNK>"
+  },
+  {
+    "prompt": "def quicksort(arr):\n    ",
+    "generated": "def quicksort(arr):\n    <UNK><UNK><UNK><UNK>[<UNK><UNK><UNK><UNK><UNK><UNK><UNK><UNK>)<UNK><UNK><UNK><UNK>j<UNK><UNK><UNK><UNK><UNK><UNK><UNK><UNK>n<UNK><UNK>n<UNK>r<UNK><UNK><UNK><UNK><UNK><UNK>r<UNK><UNK><UNK>!<UNK>^<UNK><UNK>"
+  }
+]

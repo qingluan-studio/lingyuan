@@ -1,0 +1,137 @@
+[
+  {
+    "dataset": "唐诗",
+    "source": "chinese-poetry/chinese-poetry",
+    "description": "5000首唐诗，417K字符",
+    "config": {
+      "vocab_size": 512,
+      "hidden_dim": 64,
+      "num_heads": 4,
+      "num_layers": 4,
+      "ffn_dim": 256,
+      "max_seq_len": 64,
+      "learning_rate": 0.005
+    },
+    "vocab_size": 512,
+    "num_sequences": 17409,
+    "model_params": "134,000",
+    "epochs_completed": 12,
+    "total_steps": 300,
+    "total_time": "1835.4s",
+    "first_loss": 3.6972,
+    "last_loss": 2.7059,
+    "best_loss": 2.6472,
+    "improvement_pct": 26.8,
+    "loss_history": [
+      3.6972,
+      2.8873,
+      2.8405,
+      2.7686,
+      2.7674,
+      2.816,
+      2.6856,
+      2.7603,
+      2.8149,
+      2.6771,
+      2.6472,
+      2.7059
+    ],
+    "prompt": "春眠不觉晓",
+    "generations": {
+      "temp_0.5": "<UNK><UNK>不觉<UNK><UNK>，<UNK><UNK><UNK><UNK><UNK><UNK><UNK><UNK><UNK><UNK><UNK><UNK><UNK><UNK><UNK><UNK><UNK><UNK><UNK><UNK><UNK><UNK><UNK><UNK><UNK><UNK><UNK><UNK><UNK><UNK><UNK><UNK><UNK><UNK><UNK><UNK><UNK><UNK><UNK><UNK><UNK><UNK><UNK><UNK><UNK><UNK><UNK><UNK><UNK><UNK><UNK><UNK><UNK><UNK><UNK><UNK>。<UNK><UNK><UNK><UNK><UNK>",
+      "temp_0.8": "<UNK><UNK>不觉<UNK><UNK><UNK><UNK>。\n<UNK><UNK><UNK><UNK><UNK><UNK>，<UNK><UNK><UNK><UNK><UNK><UNK><UNK><UNK><UNK><UNK><UNK><UNK><UNK><UNK><UNK><UNK><UNK><UNK><UNK><UNK><UNK><UNK><UNK><UNK><UNK>。\n<UNK><UNK><UNK><UNK><UNK><UNK><UNK><UNK><UNK><UNK>道<UNK><UNK><UNK><UNK>，<UNK><UNK><UNK><UNK><UNK><UNK><UNK>，<UNK>",
+      "temp_1.0": "<UNK><UNK>不觉<UNK><UNK>，花<UNK><UNK>`把<UNK><UNK>\n<UNK><UNK><UNK><UNK><UNK><UNK><UNK><UNK>。。漢们应<UNK><UNK><UNK><UNK><UNK><UNK>，<UNK><UNK>苦<UNK><UNK><UNK><UNK>，元<UNK>，<UNK><UNK><UNK><UNK><UNK><UNK><UNK>你。<UNK>即<UNK><UNK><UNK><UNK><UNK><UNK>高<UNK>，<UNK><UNK><UNK>"
+    },
+    "model_path": "/data/user/work/external_datasets/results/model_唐诗_enhanced.het"
+  },
+  {
+    "dataset": "论语",
+    "source": "chinese-poetry/chinese-poetry",
+    "description": "20章512段，22K字符",
+    "config": {
+      "vocab_size": 512,
+      "hidden_dim": 64,
+      "num_heads": 4,
+      "num_layers": 4,
+      "ffn_dim": 256,
+      "max_seq_len": 64,
+      "learning_rate": 0.005
+    },
+    "vocab_size": 512,
+    "num_sequences": 921,
+    "model_params": "134,000",
+    "epochs_completed": 12,
+    "total_steps": 300,
+    "total_time": "1764.7s",
+    "first_loss": 5.3158,
+    "last_loss": 3.3212,
+    "best_loss": 3.3212,
+    "improvement_pct": 37.5,
+    "loss_history": [
+      5.3158,
+      4.5825,
+      4.2591,
+      4.0536,
+      3.8729,
+      3.7356,
+      3.5834,
+      3.5051,
+      3.5091,
+      3.5035,
+      3.4041,
+      3.3212
+    ],
+    "prompt": "子曰学而时习之",
+    "generations": {
+      "temp_0.5": "子曰学而时习之<UNK>，<UNK><UNK><UNK>，<UNK><UNK><UNK>，<UNK><UNK><UNK>，<UNK><UNK>，<UNK>，<UNK>，<UNK><UNK>，<UNK>。”\n\n<UNK>？”\n子曰：“<UNK><UNK><UNK>。”\n<UNK><UNK><UNK>，<UNK><UNK>也而<UNK>也，<UNK>，<UNK>，<UNK><UNK><UNK><UNK>，<UNK>",
+      "temp_0.8": "子曰学而时习之<UNK>。”曰：“<UNK>？”\n曰：“<UNK>，<UNK>，<UNK><UNK>”\n子。”，<UNK><UNK>因：“<UNK>望：“<UNK>子曰：“<UNK>。”\n<UNK><UNK>，<UNK>之<UNK>?与<UNK><UNK>知，约，<UNK><UNK>道<UNK>。”\n",
+      "temp_1.0": "子曰学而时习之其无<UNK><UNK>也并者而B物<UNK>也。。力，/<UNK><UNK>者。：“于其<UNK>其<UNK>子可<UNK>”矣。”人，也也，<UNK>可<UNK>内人，》\n\n<UNK>以画者G<UNK>，。”\n日<UNK>太<UNK>曰"
+    },
+    "model_path": "/data/user/work/external_datasets/results/model_论语_enhanced.het"
+  },
+  {
+    "dataset": "莎士比亚",
+    "source": "karpathy/char-rnn",
+    "description": "200K字符英文戏剧",
+    "config": {
+      "vocab_size": 512,
+      "hidden_dim": 64,
+      "num_heads": 4,
+      "num_layers": 4,
+      "ffn_dim": 256,
+      "max_seq_len": 64,
+      "learning_rate": 0.005
+    },
+    "vocab_size": 477,
+    "num_sequences": 8332,
+    "model_params": "134,000",
+    "epochs_completed": 12,
+    "total_steps": 300,
+    "total_time": "1768.6s",
+    "first_loss": 5.3684,
+    "last_loss": 2.8984,
+    "best_loss": 2.8984,
+    "improvement_pct": 46.0,
+    "loss_history": [
+      5.3684,
+      4.251,
+      3.8068,
+      3.5307,
+      3.4296,
+      3.2985,
+      3.1616,
+      3.1243,
+      3.0076,
+      2.9054,
+      2.9255,
+      2.8984
+    ],
+    "prompt": "First Citizen",
+    "generations": {
+      "temp_0.5": "First Citizen himee amoar is as cel t t be t t tar, theue the t therer he men",
+      "temp_0.8": "First Citizentan\n\n定i中elityhar, 2\n\nI ty here mr y wi moe叫loun palomelfead heli",
+      "temp_1.0": "First CitizenTT vorthad ltllln obodn ileaadtorousyh:特使watunod, toteleles带irir"
+    },
+    "model_path": "/data/user/work/external_datasets/results/model_莎士比亚_enhanced.het"
+  }
+]

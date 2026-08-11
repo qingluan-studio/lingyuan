@@ -1,0 +1,84 @@
+{
+  "version": "7.0.0-ultra",
+  "edition": "code_v7_ultra",
+  "config": {
+    "layers": 4,
+    "hidden": 64,
+    "heads": 4,
+    "kv_heads": 1,
+    "gqa_ratio": 4,
+    "experts": 4,
+    "activated": 2,
+    "norm": "deepnorm",
+    "ffn": "moe",
+    "pos": "hybrid",
+    "deepnorm_alpha": 1.6818
+  },
+  "params": "1,027,968",
+  "data_sources": {
+    "humaneval": 164,
+    "mbpp": 974,
+    "builtin": 34
+  },
+  "vocab_size": 114,
+  "num_sequences": 4568,
+  "training": {
+    "epochs": 10,
+    "steps": 400,
+    "time": "4946s",
+    "best_loss": 6.232,
+    "history": [
+      {
+        "epoch": 1,
+        "loss": 6.554959607613879,
+        "time": 491.5487017631531
+      },
+      {
+        "epoch": 2,
+        "loss": 6.45039720926764,
+        "time": 492.6840121746063
+      },
+      {
+        "epoch": 3,
+        "loss": 6.4423445956320595,
+        "time": 492.84354400634766
+      },
+      {
+        "epoch": 4,
+        "loss": 6.3644854657198975,
+        "time": 498.2622046470642
+      },
+      {
+        "epoch": 5,
+        "loss": 6.3153120649914865,
+        "time": 497.5466341972351
+      },
+      {
+        "epoch": 6,
+        "loss": 6.277674159804295,
+        "time": 500.4735834598541
+      },
+      {
+        "epoch": 7,
+        "loss": 6.232075438812531,
+        "time": 505.55295181274414
+      },
+      {
+        "epoch": 8,
+        "loss": 6.255023744657093,
+        "time": 495.3908190727234
+      },
+      {
+        "epoch": 9,
+        "loss": 6.231988201173302,
+        "time": 486.64404225349426
+      },
+      {
+        "epoch": 10,
+        "loss": 6.263147375423692,
+        "time": 485.2057137489319
+      }
+    ]
+  },
+  "timestamp": "2026-08-11 05:42:45"
+}

@@ -1,0 +1,555 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>灵元代码模型 — 训练结果报告</title>
+<style>
+* { margin: 0; padding: 0; box-sizing: border-box; }
+:root {
+  --bg: #0f0f14;
+  --surface: #1a1a24;
+  --surface-2: #22222e;
+  --border: rgba(255,255,255,0.08);
+  --text: #e5e5e5;
+  --text-muted: #8b8b9a;
+  --brand: #6c5ce7;
+  --brand-light: #a29bfe;
+  --success: #00d4a0;
+  --warning: #fdcb6e;
+  --accent: #00cec9;
+  --danger: #e8463a;
+  --radius: 10px;
+}
+body {
+  background: var(--bg);
+  color: var(--text);
+  font-family: "SF Pro Text", "PingFang SC", "Noto Sans CJK SC", -apple-system, system-ui, sans-serif;
+  line-height: 1.6;
+  padding: 24px;
+  max-width: 1200px;
+  margin: 0 auto;
+}
+.header {
+  text-align: center;
+  padding: 40px 24px;
+  background: linear-gradient(135deg, var(--surface) 0%, var(--surface-2) 100%);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  margin-bottom: 32px;
+}
+.header h1 {
+  font-size: 28px;
+  font-weight: 700;
+  background: linear-gradient(135deg, var(--brand-light), var(--accent));
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  margin-bottom: 8px;
+}
+.header .subtitle {
+  color: var(--text-muted);
+  font-size: 14px;
+}
+.header .meta {
+  display: flex;
+  justify-content: center;
+  gap: 24px;
+  margin-top: 16px;
+  flex-wrap: wrap;
+}
+.meta-badge {
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  padding: 4px 16px;
+  font-size: 13px;
+  color: var(--text-muted);
+}
+.meta-badge strong { color: var(--brand-light); }
+.section { margin-bottom: 32px; }
+.section-title {
+  font-size: 18px;
+  font-weight: 600;
+  color: var(--text);
+  margin-bottom: 16px;
+  padding-left: 12px;
+  border-left: 3px solid var(--brand);
+}
+.kpi-strip {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+  gap: 12px;
+  margin-bottom: 24px;
+}
+.kpi-card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 16px 20px;
+  text-align: center;
+}
+.kpi-label {
+  font-size: 12px;
+  color: var(--text-muted);
+  margin-bottom: 4px;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+.kpi-value {
+  font-size: 22px;
+  font-weight: 700;
+  font-family: "Inter", "SF Pro Text", monospace;
+}
+.kpi-value.brand { color: var(--brand-light); }
+.kpi-value.success { color: var(--success); }
+.kpi-value.accent { color: var(--accent); }
+.arch-panel, .chart-panel, .gen-panel, .file-list, .data-panel {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 24px;
+  margin-bottom: 16px;
+}
+.arch-header {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 16px;
+}
+.arch-badge {
+  background: var(--brand);
+  color: #fff;
+  font-size: 11px;
+  font-weight: 600;
+  padding: 3px 10px;
+  border-radius: 999px;
+}
+.arch-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(130px, 1fr));
+  gap: 8px;
+}
+.arch-cell {
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 10px 14px;
+}
+.arch-cell-label {
+  font-size: 11px;
+  color: var(--text-muted);
+  margin-bottom: 2px;
+}
+.arch-cell-value {
+  font-size: 14px;
+  font-weight: 500;
+  font-family: "JetBrains Mono", "SF Mono", monospace;
+  color: var(--brand-light);
+}
+.chart-svg { width: 100%; height: auto; }
+.cmp-table {
+  width: 100%;
+  border-collapse: collapse;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  overflow: hidden;
+  font-size: 13px;
+}
+.cmp-table th {
+  background: var(--surface-2);
+  padding: 12px 16px;
+  text-align: left;
+  font-weight: 600;
+  color: var(--text-muted);
+  font-size: 12px;
+  text-transform: uppercase;
+}
+.cmp-table td {
+  padding: 10px 16px;
+  border-bottom: 1px solid var(--border);
+}
+.cmp-table tr:last-child td { border-bottom: none; }
+.cmp-table .num {
+  font-family: "JetBrains Mono", monospace;
+  text-align: right;
+}
+.cmp-table .highlight td { background: rgba(108,92,231,0.08); }
+.gen-prompt {
+  font-size: 13px;
+  color: var(--text-muted);
+  margin-bottom: 8px;
+}
+.gen-prompt strong { color: var(--accent); }
+.gen-text {
+  font-family: "JetBrains Mono", "SF Mono", monospace;
+  font-size: 13px;
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-left: 3px solid var(--brand);
+  border-radius: 6px;
+  padding: 12px 16px;
+  word-break: break-all;
+  color: var(--text);
+  white-space: pre-wrap;
+}
+.file-item {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 10px 0;
+  border-bottom: 1px solid var(--border);
+  font-size: 13px;
+}
+.file-item:last-child { border-bottom: none; }
+.file-name {
+  font-family: "JetBrains Mono", monospace;
+  color: var(--brand-light);
+}
+.file-size { color: var(--text-muted); font-family: monospace; }
+.data-source {
+  display: flex;
+  justify-content: space-between;
+  padding: 8px 0;
+  border-bottom: 1px solid var(--border);
+  font-size: 13px;
+}
+.data-source:last-child { border-bottom: none; }
+.data-badge {
+  display: inline-block;
+  padding: 2px 8px;
+  border-radius: 4px;
+  font-size: 11px;
+  font-weight: 600;
+}
+.data-badge.hf { background: rgba(255,180,50,0.15); color: #fdcb6e; }
+.data-badge.builtin { background: rgba(0,206,201,0.15); color: var(--accent); }
+.footer {
+  text-align: center;
+  padding: 24px;
+  color: var(--text-muted);
+  font-size: 12px;
+  border-top: 1px solid var(--border);
+  margin-top: 32px;
+}
+</style>
+</head>
+<body>
+
+<div class="header">
+  <h1>灵元代码模型 Lingyuan Code Model</h1>
+  <div class="subtitle">V7.0 ULTRA Code Edition — 训练结果报告</div>
+  <div class="meta">
+    <span class="meta-badge">训练时间: <strong>2026-08-11 04:20-05:42</strong></span>
+    <span class="meta-badge">总用时: <strong>82.4 min</strong></span>
+    <span class="meta-badge">模型参数: <strong>1,027,968</strong></span>
+    <span class="meta-badge">训练步数: <strong>400</strong></span>
+  </div>
+</div>
+
+<!-- KPI -->
+<div class="kpi-strip">
+  <div class="kpi-card">
+    <div class="kpi-label">模型参数</div>
+    <div class="kpi-value brand">1.03M</div>
+  </div>
+  <div class="kpi-card">
+    <div class="kpi-label">代码样本</div>
+    <div class="kpi-value">1,172</div>
+  </div>
+  <div class="kpi-card">
+    <div class="kpi-label">训练序列</div>
+    <div class="kpi-value">4,568</div>
+  </div>
+  <div class="kpi-card">
+    <div class="kpi-label">初始 Loss</div>
+    <div class="kpi-value">6.5550</div>
+  </div>
+  <div class="kpi-card">
+    <div class="kpi-label">最优 Loss</div>
+    <div class="kpi-value success">6.2320</div>
+  </div>
+  <div class="kpi-card">
+    <div class="kpi-label">Loss 改善</div>
+    <div class="kpi-value success">4.9%</div>
+  </div>
+  <div class="kpi-card">
+    <div class="kpi-label">最低单步Loss</div>
+    <div class="kpi-value accent">5.9717</div>
+  </div>
+</div>
+
+<!-- Data Sources -->
+<div class="section">
+  <div class="section-title">训练数据来源</div>
+  <div class="data-panel">
+    <div class="data-source">
+      <span><span class="data-badge hf">HumanEval</span> OpenAI 代码生成评测集 — 164题</span>
+      <span style="color:var(--text-muted)">prompt + canonical_solution</span>
+    </div>
+    <div class="data-source">
+      <span><span class="data-badge hf">MBPP</span> Google Mostly Basic Python Problems — 974题</span>
+      <span style="color:var(--text-muted)">text + code</span>
+    </div>
+    <div class="data-source">
+      <span><span class="data-badge builtin">BUILTIN</span> 内置多语言代码语料 — 34个样本</span>
+      <span style="color:var(--text-muted)">Python/JS/C/Java 算法实现</span>
+    </div>
+    <div class="data-source">
+      <span>词表大小</span>
+      <span style="color:var(--brand-light);font-family:monospace">114 (代码字符级)</span>
+    </div>
+    <div class="data-source">
+      <span>序列长度</span>
+      <span style="color:var(--brand-light);font-family:monospace">96 tokens</span>
+    </div>
+  </div>
+</div>
+
+<!-- Architecture -->
+<div class="section">
+  <div class="section-title">模型架构</div>
+  <div class="arch-panel">
+    <div class="arch-header">
+      <span class="arch-badge">V7.0 ULTRA CODE</span>
+      <span style="font-size:16px;font-weight:600;">DeepNorm + GQA + MoE + RoPE/ALiBi</span>
+    </div>
+    <div class="arch-grid">
+      <div class="arch-cell"><div class="arch-cell-label">版本</div><div class="arch-cell-value">7.0.0-ultra</div></div>
+      <div class="arch-cell"><div class="arch-cell-label">层数</div><div class="arch-cell-value">4</div></div>
+      <div class="arch-cell"><div class="arch-cell-label">隐藏维度</div><div class="arch-cell-value">64</div></div>
+      <div class="arch-cell"><div class="arch-cell-label">注意力头</div><div class="arch-cell-value">4</div></div>
+      <div class="arch-cell"><div class="arch-cell-label">KV头 (GQA)</div><div class="arch-cell-value">1 (ratio=4)</div></div>
+      <div class="arch-cell"><div class="arch-cell-label">FFN</div><div class="arch-cell-value">MoE 4→2</div></div>
+      <div class="arch-cell"><div class="arch-cell-label">归一化</div><div class="arch-cell-value">DeepNorm</div></div>
+      <div class="arch-cell"><div class="arch-cell-label">位置编码</div><div class="arch-cell-value">RoPE+ALiBi</div></div>
+      <div class="arch-cell"><div class="arch-cell-label">滑动窗口</div><div class="arch-cell-value">48</div></div>
+      <div class="arch-cell"><div class="arch-cell-label">序列长度</div><div class="arch-cell-value">96</div></div>
+      <div class="arch-cell"><div class="arch-cell-label">DeepNorm α</div><div class="arch-cell-value">1.6818</div></div>
+      <div class="arch-cell"><div class="arch-cell-label">学习率策略</div><div class="arch-cell-value">warmup+cosine</div></div>
+    </div>
+  </div>
+</div>
+
+<!-- Loss Chart -->
+<div class="section">
+  <div class="section-title">训练 Loss 曲线</div>
+  <div class="chart-panel">
+    <svg class="chart-svg" viewBox="0 0 700 280" preserveAspectRatio="xMidYMid meet">
+      <line x1="50" y1="240" x2="680" y2="240" stroke="rgba(255,255,255,0.1)" stroke-width="1"/>
+      <line x1="50" y1="10" x2="50" y2="240" stroke="rgba(255,255,255,0.1)" stroke-width="1"/>
+      <line x1="50" y1="60" x2="680" y2="60" stroke="rgba(255,255,255,0.05)" stroke-width="1" stroke-dasharray="4,4"/>
+      <line x1="50" y1="110" x2="680" y2="110" stroke="rgba(255,255,255,0.05)" stroke-width="1" stroke-dasharray="4,4"/>
+      <line x1="50" y1="160" x2="680" y2="160" stroke="rgba(255,255,255,0.05)" stroke-width="1" stroke-dasharray="4,4"/>
+      <text x="42" y="15" font-size="10" fill="#8b8b9a" text-anchor="end">6.60</text>
+      <text x="42" y="65" font-size="10" fill="#8b8b9a" text-anchor="end">6.50</text>
+      <text x="42" y="115" font-size="10" fill="#8b8b9a" text-anchor="end">6.40</text>
+      <text x="42" y="165" font-size="10" fill="#8b8b9a" text-anchor="end">6.30</text>
+      <text x="42" y="245" font-size="10" fill="#8b8b9a" text-anchor="end">6.20</text>
+      <polyline points="65,30 128,80 191,85 254,120 317,145 380,165 443,190 506,175 569,195 632,185"
+        fill="none" stroke="#6c5ce7" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>
+      <circle cx="65" cy="30" r="3.5" fill="#6c5ce7"/>
+      <circle cx="128" cy="80" r="3.5" fill="#6c5ce7"/>
+      <circle cx="191" cy="85" r="3.5" fill="#6c5ce7"/>
+      <circle cx="254" cy="120" r="3.5" fill="#6c5ce7"/>
+      <circle cx="317" cy="145" r="3.5" fill="#6c5ce7"/>
+      <circle cx="380" cy="165" r="3.5" fill="#6c5ce7"/>
+      <circle cx="443" cy="190" r="3.5" fill="#6c5ce7"/>
+      <circle cx="506" cy="175" r="3.5" fill="#6c5ce7"/>
+      <circle cx="569" cy="195" r="5" fill="#00d4a0" stroke="#1a1a24" stroke-width="2"/>
+      <circle cx="632" cy="185" r="3.5" fill="#6c5ce7"/>
+      <text x="65" y="260" font-size="10" fill="#8b8b9a" text-anchor="middle">E1</text>
+      <text x="128" y="260" font-size="10" fill="#8b8b9a" text-anchor="middle">E2</text>
+      <text x="191" y="260" font-size="10" fill="#8b8b9a" text-anchor="middle">E3</text>
+      <text x="254" y="260" font-size="10" fill="#8b8b9a" text-anchor="middle">E4</text>
+      <text x="317" y="260" font-size="10" fill="#8b8b9a" text-anchor="middle">E5</text>
+      <text x="380" y="260" font-size="10" fill="#8b8b9a" text-anchor="middle">E6</text>
+      <text x="443" y="260" font-size="10" fill="#8b8b9a" text-anchor="middle">E7</text>
+      <text x="506" y="260" font-size="10" fill="#8b8b9a" text-anchor="middle">E8</text>
+      <text x="569" y="260" font-size="10" fill="#8b8b9a" text-anchor="middle">E9</text>
+      <text x="632" y="260" font-size="10" fill="#8b8b9a" text-anchor="middle">E10</text>
+      <text x="65" y="22" font-size="10" fill="#a29bfe" text-anchor="middle">6.555</text>
+      <text x="569" y="210" font-size="10" fill="#00d4a0" text-anchor="middle" font-weight="600">6.232</text>
+      <text x="350" y="275" font-size="11" fill="#8b8b9a" text-anchor="middle">Epoch (每轮40步, warmup+cosine LR, base_lr=0.001)</text>
+    </svg>
+  </div>
+</div>
+
+<!-- Epoch Detail Table -->
+<div class="section">
+  <div class="section-title">逐轮训练详情</div>
+  <table class="cmp-table">
+    <thead>
+      <tr>
+        <th>Epoch</th>
+        <th class="num">平均 Loss</th>
+        <th class="num">最低单步</th>
+        <th class="num">用时</th>
+        <th class="num">改善</th>
+        <th>状态</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr><td>1</td><td class="num">6.5550</td><td class="num">6.3039</td><td class="num">492s</td><td class="num">—</td><td>初始</td></tr>
+      <tr><td>2</td><td class="num">6.4504</td><td class="num">6.2542</td><td class="num">493s</td><td class="num">-0.1046</td><td style="color:var(--success)">改善</td></tr>
+      <tr><td>3</td><td class="num">6.4423</td><td class="num">6.2314</td><td class="num">493s</td><td class="num">-0.0081</td><td style="color:var(--success)">改善</td></tr>
+      <tr><td>4</td><td class="num">6.3645</td><td class="num">6.2561</td><td class="num">498s</td><td class="num">-0.0778</td><td style="color:var(--success)">改善</td></tr>
+      <tr><td>5</td><td class="num">6.3153</td><td class="num">6.1524</td><td class="num">498s</td><td class="num">-0.0492</td><td style="color:var(--success)">改善</td></tr>
+      <tr><td>6</td><td class="num">6.2777</td><td class="num" style="color:var(--accent)">5.9717</td><td class="num">500s</td><td class="num">-0.0376</td><td style="color:var(--success)">改善</td></tr>
+      <tr class="highlight"><td>7</td><td class="num">6.2321</td><td class="num">6.1177</td><td class="num">506s</td><td class="num">-0.0456</td><td style="color:var(--success)">改善</td></tr>
+      <tr><td>8</td><td class="num">6.2550</td><td class="num">6.0706</td><td class="num">495s</td><td class="num">+0.0229</td><td style="color:var(--warning)">波动</td></tr>
+      <tr class="highlight"><td>9</td><td class="num" style="color:var(--success)">6.2320</td><td class="num">6.0269</td><td class="num">487s</td><td class="num">-0.0230</td><td style="color:var(--success)">最优</td></tr>
+      <tr><td>10</td><td class="num">6.2631</td><td class="num">6.0258</td><td class="num">485s</td><td class="num">+0.0311</td><td style="color:var(--warning)">收敛</td></tr>
+    </tbody>
+  </table>
+</div>
+
+<!-- Code Generation Tests -->
+<div class="section">
+  <div class="section-title">代码生成测试</div>
+  <div class="gen-panel">
+    <div class="gen-prompt"><strong>测试1</strong> | prompt: <code>def fibonacci(n):</code> | temp=0.7, top_k=15</div>
+    <div class="gen-text">def fibonacci(n):
+    n"[n&iko[<aehX"uB/[]@^(</div>
+  </div>
+  <div class="gen-panel">
+    <div class="gen-prompt"><strong>测试2</strong> | prompt: <code>def binary_search(arr, target):</code> | temp=0.7, top_k=15</div>
+    <div class="gen-text">def binary_search(arr, target):
+    rn试nss[d}: 
+ nCfNn.F误 误)f</div>
+  </div>
+  <div class="gen-panel">
+    <div class="gen-prompt"><strong>测试3</strong> | prompt: <code>def is_prime(n):</code> | temp=0.7, top_k=15</div>
+    <div class="gen-text">def is_prime(n):
+    yzli
+NmDs+ntoo]3ooxV^</div>
+  </div>
+  <div class="gen-panel">
+    <div class="gen-prompt"><strong>测试4</strong> | prompt: <code>def quicksort(arr):</code> | temp=0.7, top_k=15</div>
+    <div class="gen-text">def quicksort(arr):
+    [)jnRr!^</div>
+  </div>
+</div>
+
+<!-- Comparison with Poetry Model -->
+<div class="section">
+  <div class="section-title">代码模型 vs 诗词模型对比</div>
+  <table class="cmp-table">
+    <thead>
+      <tr>
+        <th>维度</th>
+        <th>诗词模型 (lingyuan_v7)</th>
+        <th>代码模型 (lingyuan_code_v7)</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td>训练数据</td>
+        <td>内置古诗词 (300字符, 17序列)</td>
+        <td>HumanEval+MBPP+内置 (1172样本, 4568序列)</td>
+      </tr>
+      <tr>
+        <td>序列长度</td>
+        <td class="num">64</td>
+        <td class="num">96</td>
+      </tr>
+      <tr>
+        <td>词表大小</td>
+        <td class="num">300</td>
+        <td class="num">114</td>
+      </tr>
+      <tr>
+        <td>模型参数</td>
+        <td class="num">1,027,968</td>
+        <td class="num">1,027,968</td>
+      </tr>
+      <tr>
+        <td>初始 Loss</td>
+        <td class="num">6.3358</td>
+        <td class="num">6.5550</td>
+      </tr>
+      <tr>
+        <td>最优 Loss</td>
+        <td class="num">6.2209</td>
+        <td class="num">6.2320</td>
+      </tr>
+      <tr>
+        <td>Loss 改善率</td>
+        <td class="num">1.81%</td>
+        <td class="num">4.93%</td>
+      </tr>
+      <tr>
+        <td>训练时间</td>
+        <td class="num">3273s (54.5min)</td>
+        <td class="num">4946s (82.4min)</td>
+      </tr>
+      <tr>
+        <td>每步时间</td>
+        <td class="num">~8.2s</td>
+        <td class="num">~12.4s</td>
+      </tr>
+    </tbody>
+  </table>
+</div>
+
+<!-- File List -->
+<div class="section">
+  <div class="section-title">仓库文件清单</div>
+  <div class="file-list">
+    <div class="file-item">
+      <span class="file-name">lingyuan_code_v7.py</span>
+      <span class="file-size">30 KB · 代码训练系统源码</span>
+    </div>
+    <div class="file-item">
+      <span class="file-name">lingyuan_code_v7.het</span>
+      <span class="file-size">22 MB · V7.0 ULTRA 代码模型</span>
+    </div>
+    <div class="file-item">
+      <span class="file-name">code_training_report.json</span>
+      <span class="file-size">1.7 KB · 训练报告</span>
+    </div>
+    <div class="file-item">
+      <span class="file-name">code_generations.json</span>
+      <span class="file-size">1.1 KB · 代码生成结果</span>
+    </div>
+    <div class="file-item">
+      <span class="file-name">code_training_results.html</span>
+      <span class="file-size">本报告</span>
+    </div>
+    <div class="file-item">
+      <span class="file-name">data/humaneval.jsonl</span>
+      <span class="file-size">210 KB · HumanEval 数据集 (164题)</span>
+    </div>
+    <div class="file-item">
+      <span class="file-name">data/mbpp.jsonl</span>
+      <span class="file-size">551 KB · MBPP 数据集 (974题)</span>
+    </div>
+  </div>
+</div>
+
+<!-- Open Source Resources Used -->
+<div class="section">
+  <div class="section-title">使用的开源训练资源</div>
+  <div class="data-panel">
+    <div class="data-source">
+      <span><span class="data-badge hf">HumanEval</span> OpenAI 代码生成评测集</span>
+      <span style="color:var(--text-muted)">huggingface.co/datasets/openai_humaneval</span>
+    </div>
+    <div class="data-source">
+      <span><span class="data-badge hf">MBPP</span> Google Mostly Basic Python Problems</span>
+      <span style="color:var(--text-muted)">huggingface.co/datasets/google-research-datasets/mbpp</span>
+    </div>
+    <div class="data-source">
+      <span><span class="data-badge builtin">BUILTIN</span> 内置多语言算法代码 (Python/JS/C/Java)</span>
+      <span style="color:var(--text-muted)">排序/搜索/图论/DP/数据结构</span>
+    </div>
+  </div>
+</div>
+
+<div class="footer">
+  灵元代码模型 Lingyuan Code Model · V7.0 ULTRA Code Edition<br>
+  DeepNorm + GQA + MoE + RoPE/ALiBi · 零外部依赖纯Python标准库 · 2026-08-11
+</div>
+
+</body>
+</html>

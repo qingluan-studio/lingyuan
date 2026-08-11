@@ -1,0 +1,634 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>灵元模型 — 全量训练结果报告</title>
+<style>
+* { margin: 0; padding: 0; box-sizing: border-box; }
+:root {
+  --bg: #0f0f14;
+  --surface: #1a1a24;
+  --surface-2: #22222e;
+  --border: rgba(255,255,255,0.08);
+  --text: #e5e5e5;
+  --text-muted: #8b8b9a;
+  --brand: #6c5ce7;
+  --brand-light: #a29bfe;
+  --brand-glow: rgba(108,92,231,0.3);
+  --success: #00d4a0;
+  --warning: #fdcb6e;
+  --danger: #e8463a;
+  --accent: #00cec9;
+  --radius: 10px;
+}
+body {
+  background: var(--bg);
+  color: var(--text);
+  font-family: "SF Pro Text", "PingFang SC", "Noto Sans CJK SC", -apple-system, system-ui, sans-serif;
+  line-height: 1.6;
+  padding: 24px;
+  max-width: 1200px;
+  margin: 0 auto;
+}
+.header {
+  text-align: center;
+  padding: 40px 24px;
+  background: linear-gradient(135deg, var(--surface) 0%, var(--surface-2) 100%);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  margin-bottom: 32px;
+}
+.header h1 {
+  font-size: 28px;
+  font-weight: 700;
+  background: linear-gradient(135deg, var(--brand-light), var(--accent));
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  margin-bottom: 8px;
+}
+.header .subtitle {
+  color: var(--text-muted);
+  font-size: 14px;
+}
+.header .meta {
+  display: flex;
+  justify-content: center;
+  gap: 24px;
+  margin-top: 16px;
+  flex-wrap: wrap;
+}
+.meta-badge {
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  padding: 4px 16px;
+  font-size: 13px;
+  color: var(--text-muted);
+}
+.meta-badge strong { color: var(--brand-light); }
+
+.section {
+  margin-bottom: 32px;
+}
+.section-title {
+  font-size: 18px;
+  font-weight: 600;
+  color: var(--text);
+  margin-bottom: 16px;
+  padding-left: 12px;
+  border-left: 3px solid var(--brand);
+}
+
+/* KPI Strip */
+.kpi-strip {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+  gap: 12px;
+  margin-bottom: 24px;
+}
+.kpi-card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 16px 20px;
+  text-align: center;
+}
+.kpi-label {
+  font-size: 12px;
+  color: var(--text-muted);
+  margin-bottom: 4px;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+.kpi-value {
+  font-size: 22px;
+  font-weight: 700;
+  font-family: "Inter", "SF Pro Text", monospace;
+}
+.kpi-value.brand { color: var(--brand-light); }
+.kpi-value.success { color: var(--success); }
+.kpi-value.accent { color: var(--accent); }
+
+/* V7 Architecture */
+.arch-panel {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 24px;
+  margin-bottom: 24px;
+}
+.arch-header {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 16px;
+}
+.arch-badge {
+  background: var(--brand);
+  color: #fff;
+  font-size: 11px;
+  font-weight: 600;
+  padding: 3px 10px;
+  border-radius: 999px;
+  letter-spacing: 0.03em;
+}
+.arch-title {
+  font-size: 16px;
+  font-weight: 600;
+}
+.arch-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+  gap: 8px;
+}
+.arch-cell {
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 10px 14px;
+}
+.arch-cell-label {
+  font-size: 11px;
+  color: var(--text-muted);
+  margin-bottom: 2px;
+}
+.arch-cell-value {
+  font-size: 14px;
+  font-weight: 500;
+  font-family: "JetBrains Mono", "SF Mono", monospace;
+  color: var(--brand-light);
+}
+
+/* Loss Chart */
+.chart-panel {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 24px;
+  margin-bottom: 24px;
+}
+.chart-panel-title {
+  font-size: 15px;
+  font-weight: 600;
+  margin-bottom: 16px;
+}
+.chart-svg {
+  width: 100%;
+  height: auto;
+}
+
+/* Comparison Table */
+.cmp-table {
+  width: 100%;
+  border-collapse: collapse;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  overflow: hidden;
+  font-size: 13px;
+}
+.cmp-table th {
+  background: var(--surface-2);
+  padding: 12px 16px;
+  text-align: left;
+  font-weight: 600;
+  color: var(--text-muted);
+  font-size: 12px;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+  border-bottom: 1px solid var(--border);
+}
+.cmp-table td {
+  padding: 10px 16px;
+  border-bottom: 1px solid var(--border);
+}
+.cmp-table tr:last-child td {
+  border-bottom: none;
+}
+.cmp-table tr:hover td {
+  background: var(--surface-2);
+}
+.cmp-table .num {
+  font-family: "JetBrains Mono", "SF Mono", monospace;
+  text-align: right;
+}
+.cmp-table .highlight td {
+  background: rgba(108,92,231,0.08);
+}
+.loss-bar {
+  display: inline-block;
+  height: 6px;
+  border-radius: 3px;
+  background: var(--brand);
+  vertical-align: middle;
+  margin-right: 6px;
+}
+.loss-bar.success { background: var(--success); }
+.loss-bar.warning { background: var(--warning); }
+
+/* Generation Output */
+.gen-panel {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 20px;
+  margin-bottom: 16px;
+}
+.gen-prompt {
+  font-size: 13px;
+  color: var(--text-muted);
+  margin-bottom: 8px;
+}
+.gen-prompt strong {
+  color: var(--accent);
+}
+.gen-text {
+  font-family: "JetBrains Mono", "SF Mono", monospace;
+  font-size: 13px;
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-left: 3px solid var(--brand);
+  border-radius: 6px;
+  padding: 12px 16px;
+  word-break: break-all;
+  color: var(--text);
+}
+
+/* Training Stages */
+.stages {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  margin-bottom: 24px;
+}
+.stage-chip {
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  padding: 6px 16px;
+  font-size: 13px;
+  color: var(--text-muted);
+}
+.stage-chip.active {
+  background: var(--brand);
+  border-color: var(--brand);
+  color: #fff;
+}
+
+/* File List */
+.file-list {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 20px;
+}
+.file-item {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 10px 0;
+  border-bottom: 1px solid var(--border);
+  font-size: 13px;
+}
+.file-item:last-child { border-bottom: none; }
+.file-name {
+  font-family: "JetBrains Mono", monospace;
+  color: var(--brand-light);
+}
+.file-size {
+  color: var(--text-muted);
+  font-family: monospace;
+}
+
+.footer {
+  text-align: center;
+  padding: 24px;
+  color: var(--text-muted);
+  font-size: 12px;
+  border-top: 1px solid var(--border);
+  margin-top: 32px;
+}
+</style>
+</head>
+<body>
+
+<div class="header">
+  <h1>灵元模型 Lingyuan Model</h1>
+  <div class="subtitle">全量训练结果报告 — V7.0 ULTRA + 多数据集增强训练</div>
+  <div class="meta">
+    <span class="meta-badge">生成时间: <strong>2026-08-11 04:15</strong></span>
+    <span class="meta-badge">模型总数: <strong>7</strong></span>
+    <span class="meta-badge">最大参数: <strong>1,027,968</strong></span>
+    <span class="meta-badge">总训练时长: <strong>~4.1小时</strong></span>
+  </div>
+</div>
+
+<!-- Training Stages -->
+<div class="section">
+  <div class="section-title">训练阶段</div>
+  <div class="stages">
+    <span class="stage-chip">V1 基础 (33K参数)</span>
+    <span class="stage-chip">V2 优化 (134K, warmup+cosine)</span>
+    <span class="stage-chip">Enhanced 增强 (134K, 512词表)</span>
+    <span class="stage-chip active">V7.0 ULTRA (1M, DeepNorm+GQA+MoE)</span>
+  </div>
+</div>
+
+<!-- KPI Strip -->
+<div class="kpi-strip">
+  <div class="kpi-card">
+    <div class="kpi-label">V7 最大参数</div>
+    <div class="kpi-value brand">1.03M</div>
+  </div>
+  <div class="kpi-card">
+    <div class="kpi-label">V7 最优 Loss</div>
+    <div class="kpi-value success">6.1032</div>
+  </div>
+  <div class="kpi-card">
+    <div class="kpi-label">Enhanced 最优 Loss</div>
+    <div class="kpi-value success">2.6472</div>
+  </div>
+  <div class="kpi-card">
+    <div class="kpi-label">最大改善率</div>
+    <div class="kpi-value accent">46.0%</div>
+  </div>
+  <div class="kpi-card">
+    <div class="kpi-label">训练步数总计</div>
+    <div class="kpi-value">2,100+</div>
+  </div>
+  <div class="kpi-card">
+    <div class="kpi-label">数据集</div>
+    <div class="kpi-value">3</div>
+  </div>
+</div>
+
+<!-- V7 Architecture -->
+<div class="section">
+  <div class="section-title">V7.0 ULTRA 架构</div>
+  <div class="arch-panel">
+    <div class="arch-header">
+      <span class="arch-badge">LATEST</span>
+      <span class="arch-title">DeepNorm + GQA + MoE + RoPE/ALiBi 混合位置编码</span>
+    </div>
+    <div class="arch-grid">
+      <div class="arch-cell"><div class="arch-cell-label">版本</div><div class="arch-cell-value">7.0.0-ultra</div></div>
+      <div class="arch-cell"><div class="arch-cell-label">层数</div><div class="arch-cell-value">4</div></div>
+      <div class="arch-cell"><div class="arch-cell-label">隐藏维度</div><div class="arch-cell-value">64</div></div>
+      <div class="arch-cell"><div class="arch-cell-label">注意力头</div><div class="arch-cell-value">4</div></div>
+      <div class="arch-cell"><div class="arch-cell-label">KV头 (GQA)</div><div class="arch-cell-value">1 (ratio=4)</div></div>
+      <div class="arch-cell"><div class="arch-cell-label">FFN类型</div><div class="arch-cell-value">MoE 4→2</div></div>
+      <div class="arch-cell"><div class="arch-cell-label">归一化</div><div class="arch-cell-value">DeepNorm</div></div>
+      <div class="arch-cell"><div class="arch-cell-label">位置编码</div><div class="arch-cell-value">RoPE+ALiBi</div></div>
+      <div class="arch-cell"><div class="arch-cell-label">滑动窗口</div><div class="arch-cell-value">32</div></div>
+      <div class="arch-cell"><div class="arch-cell-label">DeepNorm α</div><div class="arch-cell-value">1.6818</div></div>
+      <div class="arch-cell"><div class="arch-cell-label">FFN维度</div><div class="arch-cell-value">256</div></div>
+      <div class="arch-cell"><div class="arch-cell-label">词表大小</div><div class="arch-cell-value">300</div></div>
+    </div>
+  </div>
+</div>
+
+<!-- V7 Loss Chart -->
+<div class="section">
+  <div class="section-title">V7.0 ULTRA 训练 Loss 曲线</div>
+  <div class="chart-panel">
+    <div class="chart-panel-title">Phase 1: 10轮 × 40步 = 400步 (warmup+cosine LR, base=0.001)</div>
+    <svg class="chart-svg" viewBox="0 0 700 260" preserveAspectRatio="xMidYMid meet">
+      <!-- Grid -->
+      <line x1="50" y1="220" x2="680" y2="220" stroke="rgba(255,255,255,0.1)" stroke-width="1"/>
+      <line x1="50" y1="10" x2="50" y2="220" stroke="rgba(255,255,255,0.1)" stroke-width="1"/>
+      <line x1="50" y1="60" x2="680" y2="60" stroke="rgba(255,255,255,0.05)" stroke-width="1" stroke-dasharray="4,4"/>
+      <line x1="50" y1="110" x2="680" y2="110" stroke="rgba(255,255,255,0.05)" stroke-width="1" stroke-dasharray="4,4"/>
+      <line x1="50" y1="165" x2="680" y2="165" stroke="rgba(255,255,255,0.05)" stroke-width="1" stroke-dasharray="4,4"/>
+      <!-- Y labels -->
+      <text x="42" y="15" font-size="10" fill="#8b8b9a" text-anchor="end">6.36</text>
+      <text x="42" y="65" font-size="10" fill="#8b8b9a" text-anchor="end">6.32</text>
+      <text x="42" y="115" font-size="10" fill="#8b8b9a" text-anchor="end">6.28</text>
+      <text x="42" y="170" font-size="10" fill="#8b8b9a" text-anchor="end">6.24</text>
+      <text x="42" y="225" font-size="10" fill="#8b8b9a" text-anchor="end">6.20</text>
+      <!-- Loss line (Phase 1) -->
+      <polyline points="65,18 128,30 191,55 254,62 317,82 380,98 443,110 506,102 569,106 632,115"
+        fill="none" stroke="#6c5ce7" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>
+      <!-- Points -->
+      <circle cx="65" cy="18" r="3.5" fill="#6c5ce7"/>
+      <circle cx="128" cy="30" r="3.5" fill="#6c5ce7"/>
+      <circle cx="191" cy="55" r="3.5" fill="#6c5ce7"/>
+      <circle cx="254" cy="62" r="3.5" fill="#6c5ce7"/>
+      <circle cx="317" cy="82" r="3.5" fill="#6c5ce7"/>
+      <circle cx="380" cy="98" r="3.5" fill="#6c5ce7"/>
+      <circle cx="443" cy="110" r="3.5" fill="#6c5ce7"/>
+      <circle cx="506" cy="102" r="3.5" fill="#6c5ce7"/>
+      <circle cx="569" cy="106" r="3.5" fill="#6c5ce7"/>
+      <circle cx="632" cy="115" r="5" fill="#00d4a0" stroke="#1a1a24" stroke-width="2"/>
+      <!-- Phase 2 resume (partial) -->
+      <polyline points="632,115 660,148"
+        fill="none" stroke="#00cec9" stroke-width="2" stroke-linecap="round" stroke-dasharray="4,4"/>
+      <circle cx="660" cy="148" r="4" fill="#00cec9"/>
+      <!-- X labels -->
+      <text x="65" y="240" font-size="10" fill="#8b8b9a" text-anchor="middle">E1</text>
+      <text x="128" y="240" font-size="10" fill="#8b8b9a" text-anchor="middle">E2</text>
+      <text x="191" y="240" font-size="10" fill="#8b8b9a" text-anchor="middle">E3</text>
+      <text x="254" y="240" font-size="10" fill="#8b8b9a" text-anchor="middle">E4</text>
+      <text x="317" y="240" font-size="10" fill="#8b8b9a" text-anchor="middle">E5</text>
+      <text x="380" y="240" font-size="10" fill="#8b8b9a" text-anchor="middle">E6</text>
+      <text x="443" y="240" font-size="10" fill="#8b8b9a" text-anchor="middle">E7</text>
+      <text x="506" y="240" font-size="10" fill="#8b8b9a" text-anchor="middle">E8</text>
+      <text x="569" y="240" font-size="10" fill="#8b8b9a" text-anchor="middle">E9</text>
+      <text x="632" y="240" font-size="10" fill="#8b8b9a" text-anchor="middle">E10</text>
+      <!-- Annotations -->
+      <text x="65" y="10" font-size="10" fill="#a29bfe" text-anchor="middle">6.3358</text>
+      <text x="632" y="128" font-size="10" fill="#00d4a0" text-anchor="middle" font-weight="600">6.2209</text>
+      <text x="660" y="162" font-size="9" fill="#00cec9" text-anchor="middle">6.1032</text>
+      <!-- Legend -->
+      <rect x="450" y="8" width="10" height="3" fill="#6c5ce7"/>
+      <text x="465" y="13" font-size="10" fill="#8b8b9a">Phase 1</text>
+      <rect x="520" y="8" width="10" height="3" fill="#00cec9"/>
+      <text x="535" y="13" font-size="10" fill="#8b8b9a">Phase 2 (续训)</text>
+    </svg>
+  </div>
+</div>
+
+<!-- Enhanced Training Comparison -->
+<div class="section">
+  <div class="section-title">多数据集训练对比</div>
+  <table class="cmp-table">
+    <thead>
+      <tr>
+        <th>模型</th>
+        <th>版本</th>
+        <th>数据集</th>
+        <th class="num">参数</th>
+        <th class="num">步数</th>
+        <th class="num">初始Loss</th>
+        <th class="num">最优Loss</th>
+        <th class="num">改善率</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr class="highlight">
+        <td>V7.0 ULTRA</td><td>7.0.0-ultra</td><td>古诗词</td>
+        <td class="num">1,027,968</td><td class="num">400+56</td>
+        <td class="num">6.3358</td><td class="num"><span class="loss-bar success"></span>6.1032</td>
+        <td class="num">1.81%→3.7%</td>
+      </tr>
+      <tr>
+        <td>Enhanced</td><td>enhanced_v1</td><td>唐诗</td>
+        <td class="num">134,000</td><td class="num">300</td>
+        <td class="num">3.6972</td><td class="num"><span class="loss-bar success"></span>2.6472</td>
+        <td class="num">26.8%</td>
+      </tr>
+      <tr>
+        <td>Enhanced</td><td>enhanced_v1</td><td>论语</td>
+        <td class="num">134,000</td><td class="num">300</td>
+        <td class="num">5.3158</td><td class="num"><span class="loss-bar success"></span>3.3212</td>
+        <td class="num">37.5%</td>
+      </tr>
+      <tr>
+        <td>Enhanced</td><td>enhanced_v1</td><td>莎士比亚</td>
+        <td class="num">134,000</td><td class="num">300</td>
+        <td class="num">5.3684</td><td class="num"><span class="loss-bar success"></span>2.8984</td>
+        <td class="num">46.0%</td>
+      </tr>
+      <tr>
+        <td>V2 Optimized</td><td>v2_optimized</td><td>唐诗</td>
+        <td class="num">134,000</td><td class="num">300</td>
+        <td class="num">6.2599</td><td class="num"><span class="loss-bar"></span>4.7485</td>
+        <td class="num">23.8%</td>
+      </tr>
+      <tr>
+        <td>V2 Optimized</td><td>v2_optimized</td><td>论语</td>
+        <td class="num">134,000</td><td class="num">300</td>
+        <td class="num">6.2537</td><td class="num"><span class="loss-bar warning"></span>5.5994</td>
+        <td class="num">10.3%</td>
+      </tr>
+      <tr>
+        <td>V2 Optimized</td><td>v2_optimized</td><td>莎士比亚</td>
+        <td class="num">134,000</td><td class="num">300</td>
+        <td class="num">6.2311</td><td class="num"><span class="loss-bar"></span>5.0990</td>
+        <td class="num">17.6%</td>
+      </tr>
+    </tbody>
+  </table>
+</div>
+
+<!-- Enhanced Loss Curves -->
+<div class="section">
+  <div class="section-title">Enhanced 多数据集 Loss 对比</div>
+  <div class="chart-panel">
+    <svg class="chart-svg" viewBox="0 0 700 260" preserveAspectRatio="xMidYMid meet">
+      <line x1="50" y1="220" x2="680" y2="220" stroke="rgba(255,255,255,0.1)" stroke-width="1"/>
+      <line x1="50" y1="10" x2="50" y2="220" stroke="rgba(255,255,255,0.1)" stroke-width="1"/>
+      <line x1="50" y1="60" x2="680" y2="60" stroke="rgba(255,255,255,0.05)" stroke-width="1" stroke-dasharray="4,4"/>
+      <line x1="50" y1="115" x2="680" y2="115" stroke="rgba(255,255,255,0.05)" stroke-width="1" stroke-dasharray="4,4"/>
+      <line x1="50" y1="170" x2="680" y2="170" stroke="rgba(255,255,255,0.05)" stroke-width="1" stroke-dasharray="4,4"/>
+      <text x="42" y="15" font-size="10" fill="#8b8b9a" text-anchor="end">6.0</text>
+      <text x="42" y="65" font-size="10" fill="#8b8b9a" text-anchor="end">5.0</text>
+      <text x="42" y="120" font-size="10" fill="#8b8b9a" text-anchor="end">4.0</text>
+      <text x="42" y="175" font-size="10" fill="#8b8b9a" text-anchor="end">3.0</text>
+      <text x="42" y="225" font-size="10" fill="#8b8b9a" text-anchor="end">2.0</text>
+      <!-- 唐诗 -->
+      <polyline points="65,50 118,165 171,180 224,190 277,188 330,185 383,195 436,190 489,195 542,200 595,210 648,205"
+        fill="none" stroke="#6c5ce7" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+      <!-- 论语 -->
+      <polyline points="65,15 118,80 171,110 224,130 277,145 330,155 383,170 436,178 489,180 542,182 595,188 648,192"
+        fill="none" stroke="#00cec9" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+      <!-- 莎士比亚 -->
+      <polyline points="65,18 118,70 171,95 224,115 277,128 330,142 383,155 436,162 489,170 542,178 595,180 648,185"
+        fill="none" stroke="#fdcb6e" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+      <!-- X labels -->
+      <text x="65" y="240" font-size="10" fill="#8b8b9a" text-anchor="middle">E1</text>
+      <text x="171" y="240" font-size="10" fill="#8b8b9a" text-anchor="middle">E3</text>
+      <text x="277" y="240" font-size="10" fill="#8b8b9a" text-anchor="middle">E5</text>
+      <text x="383" y="240" font-size="10" fill="#8b8b9a" text-anchor="middle">E7</text>
+      <text x="489" y="240" font-size="10" fill="#8b8b9a" text-anchor="middle">E9</text>
+      <text x="648" y="240" font-size="10" fill="#8b8b9a" text-anchor="middle">E12</text>
+      <!-- Legend -->
+      <rect x="450" y="8" width="10" height="3" fill="#6c5ce7"/>
+      <text x="465" y="13" font-size="10" fill="#8b8b9a">唐诗</text>
+      <rect x="510" y="8" width="10" height="3" fill="#00cec9"/>
+      <text x="525" y="13" font-size="10" fill="#8b8b9a">论语</text>
+      <rect x="570" y="8" width="10" height="3" fill="#fdcb6e"/>
+      <text x="585" y="13" font-size="10" fill="#8b8b9a">莎士比亚</text>
+    </svg>
+  </div>
+</div>
+
+<!-- Generation Outputs -->
+<div class="section">
+  <div class="section-title">生成测试</div>
+  <div class="gen-panel">
+    <div class="gen-prompt"><strong>V7.0 ULTRA</strong> | prompt: "春眠不觉晓" | temperature=0.8, top_k=20</div>
+    <div class="gen-text">春眠不觉晓&lt;UNK&gt;&lt;UNK&gt;&lt;UNK&gt;一&lt;UNK&gt;午西人&lt;UNK&gt;翮午&lt;UNK&gt;&lt;UNK&gt;还&lt;UNK&gt;钟春&lt;UNK&gt;&lt;UNK&gt;&lt;UNK&gt;照穷&lt;UNK&gt;钓思&lt;UNK&gt;尽相&lt;UNK&gt;洛&lt;UNK&gt;&lt;UNK&gt;</div>
+  </div>
+  <div class="gen-panel">
+    <div class="gen-prompt"><strong>Enhanced 论语</strong> | prompt: "子曰学而时习之" | temperature=0.5</div>
+    <div class="gen-text">子曰学而时习之&lt;UNK&gt;，&lt;UNK&gt;&lt;UNK&gt;&lt;UNK&gt;，&lt;UNK&gt;&lt;UNK&gt;&lt;UNK&gt;，&lt;UNK&gt;&lt;UNK&gt;&lt;UNK&gt;，&lt;UNK&gt;&lt;UNK&gt;，&lt;UNK&gt;，&lt;UNK&gt;，&lt;UNK&gt;&lt;UNK&gt;，&lt;UNK&gt;。" \n\n&lt;UNK&gt;？" \n子曰："&lt;UNK&gt;&lt;UNK&gt;&lt;UNK&gt;。" \n&lt;UNK&gt;&lt;UNK&gt;&lt;UNK&gt;，&lt;UNK&gt;&lt;UNK&gt;也而&lt;UNK&gt;也，&lt;UNK&gt;，&lt;UNK&gt;，&lt;UNK&gt;&lt;UNK&gt;&lt;UNK&gt;&lt;UNK&gt;，&lt;UNK&gt;</div>
+  </div>
+  <div class="gen-panel">
+    <div class="gen-prompt"><strong>Enhanced 莎士比亚</strong> | prompt: "First Citizen" | temperature=0.5</div>
+    <div class="gen-text">First Citizen himee amoar is as cel t t be t t tar, theue the t therer he men</div>
+  </div>
+</div>
+
+<!-- File Inventory -->
+<div class="section">
+  <div class="section-title">仓库文件清单</div>
+  <div class="file-list">
+    <div class="file-item">
+      <span class="file-name">lingyuan_v7.py</span>
+      <span class="file-size">37 KB · V7.0 ULTRA 训练系统源码</span>
+    </div>
+    <div class="file-item">
+      <span class="file-name">lingyuan_v7_trained.het</span>
+      <span class="file-size">21.3 MB · V7.0 ULTRA 训练模型</span>
+    </div>
+    <div class="file-item">
+      <span class="file-name">training_report.json</span>
+      <span class="file-size">1.5 KB · V7 训练报告</span>
+    </div>
+    <div class="file-item">
+      <span class="file-name">consolidated_report.json</span>
+      <span class="file-size">3.2 KB · 综合训练报告</span>
+    </div>
+    <div class="file-item">
+      <span class="file-name">enhanced_training_report.json</span>
+      <span class="file-size">5.0 KB · Enhanced 训练报告</span>
+    </div>
+    <div class="file-item">
+      <span class="file-name">v2_training_report.json</span>
+      <span class="file-size">7.1 KB · V2 训练报告</span>
+    </div>
+    <div class="file-item">
+      <span class="file-name">external_training_report.json</span>
+      <span class="file-size">2.7 KB · 外部数据集训练报告</span>
+    </div>
+    <div class="file-item">
+      <span class="file-name">model_唐诗_enhanced.het</span>
+      <span class="file-size">1.0 MB · 唐诗增强模型</span>
+    </div>
+    <div class="file-item">
+      <span class="file-name">model_论语_enhanced.het</span>
+      <span class="file-size">1.0 MB · 论语增强模型</span>
+    </div>
+    <div class="file-item">
+      <span class="file-name">model_莎士比亚_enhanced.het</span>
+      <span class="file-size">1.0 MB · 莎士比亚增强模型</span>
+    </div>
+    <div class="file-item">
+      <span class="file-name">train_enhanced.py</span>
+      <span class="file-size">7.3 KB · Enhanced 训练脚本</span>
+    </div>
+    <div class="file-item">
+      <span class="file-name">training_results.html</span>
+      <span class="file-size">本报告</span>
+    </div>
+  </div>
+</div>
+
+<div class="footer">
+  灵元 Lingyuan Model · V7.0 ULTRA · 零外部依赖纯Python标准库实现<br>
+  DeepNorm + GQA + MoE + RoPE/ALiBi · 2026-08-11
+</div>
+
+</body>
+</html>
