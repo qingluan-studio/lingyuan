@@ -1,0 +1,148 @@
+{
+  "project": "灵元 Lingyuan Model",
+  "version": "7.0.0-ultra",
+  "training_phase": "V2 续训 (Continued Training)",
+  "timestamp": "2026-08-11 08:30:00",
+  "architecture": {
+    "name": "V7.0 ULTRA Transformer",
+    "features": [
+      "DeepNorm (alpha=1.6818)",
+      "GQA (Grouped Query Attention, ratio=4)",
+      "MoE (Mixture of Experts, 4 experts, 2 activated)",
+      "RoPE + ALiBi Hybrid Position Encoding",
+      "Sliding Window Attention (window=32)",
+      "SwiGLU Activation"
+    ],
+    "params": {
+      "total": 1027968,
+      "base": 241536,
+      "moe": 786432
+    },
+    "config": {
+      "layers": 4,
+      "hidden_dim": 64,
+      "num_heads": 4,
+      "num_kv_heads": 1,
+      "ffn_dim": 256,
+      "num_experts": 4,
+      "num_activated_experts": 2,
+      "sliding_window": 32,
+      "rope_theta": 10000.0,
+      "deepnorm_alpha": 1.6818
+    }
+  },
+  "models": {
+    "poetry": {
+      "name": "灵元诗词模型 V2",
+      "training_type": "continued",
+      "base_model": "lingyuan_v7_trained.het",
+      "output_model": "lingyuan_v7_v2.het",
+      "data": {
+        "source": "内置古诗词语料",
+        "vocab_size": 300,
+        "num_sequences": 17,
+        "max_seq_len": 64
+      },
+      "training_config": {
+        "epochs": 12,
+        "steps_per_epoch": 40,
+        "total_steps": 480,
+        "batch_size": 2,
+        "base_lr": 0.005,
+        "lr_schedule": "warmup+cosine",
+        "patience": 8
+      },
+      "results": {
+        "total_time": "7414s",
+        "v1_best_loss": 6.2209,
+        "v2_best_loss": 5.6793,
+        "improvement_pct": 8.71,
+        "improvement_abs": 0.5416,
+        "best_epoch": 10,
+        "loss_history": [
+          {"epoch": 1, "loss": 6.1957},
+          {"epoch": 2, "loss": 6.1236},
+          {"epoch": 3, "loss": 6.0120},
+          {"epoch": 4, "loss": 5.9171},
+          {"epoch": 5, "loss": 5.8387},
+          {"epoch": 6, "loss": 5.7928},
+          {"epoch": 7, "loss": 5.7508},
+          {"epoch": 8, "loss": 5.7130},
+          {"epoch": 9, "loss": 5.7146},
+          {"epoch": 10, "loss": 5.6793},
+          {"epoch": 11, "loss": 5.6848},
+          {"epoch": 12, "loss": 5.6825}
+        ]
+      },
+      "generation_test": {
+        "prompt": "春眠不觉晓",
+        "output": "春眠不觉晓江，。，江万。，，。，。，\n舟。，。人舟\n，，，。如人\n。，上尽"
+      },
+      "report_path": "lingyuan_train/v2_training_results.html"
+    },
+    "code": {
+      "name": "灵元代码模型 V2",
+      "training_type": "continued",
+      "base_model": "lingyuan_code_v7.het",
+      "output_model": "lingyuan_code_v2.het",
+      "data": {
+        "sources": {
+          "humaneval": 164,
+          "mbpp": 974,
+          "builtin": 34
+        },
+        "total_samples": 1172,
+        "vocab_size": 114,
+        "num_sequences": 4568,
+        "max_seq_len": 96
+      },
+      "training_config": {
+        "epochs": 12,
+        "steps_per_epoch": 35,
+        "total_steps": 420,
+        "batch_size": 2,
+        "base_lr": 0.003,
+        "lr_schedule": "warmup+cosine",
+        "patience": 8
+      },
+      "results": {
+        "total_time": "8654s",
+        "v1_best_loss": 6.2320,
+        "v2_best_loss": 5.2679,
+        "improvement_pct": 15.47,
+        "improvement_abs": 0.9641,
+        "best_epoch": 12,
+        "lowest_single_step_loss": 4.9888,
+        "loss_history": [
+          {"epoch": 1, "loss": 6.1601},
+          {"epoch": 2, "loss": 6.0041},
+          {"epoch": 3, "loss": 5.8503},
+          {"epoch": 4, "loss": 5.7008},
+          {"epoch": 5, "loss": 5.6028},
+          {"epoch": 6, "loss": 5.5160},
+          {"epoch": 7, "loss": 5.4283},
+          {"epoch": 8, "loss": 5.3918},
+          {"epoch": 9, "loss": 5.3147},
+          {"epoch": 10, "loss": 5.2974},
+          {"epoch": 11, "loss": 5.3044},
+          {"epoch": 12, "loss": 5.2679}
+        ]
+      },
+      "milestone": "Loss突破5.0关口 (E10 S31 = 4.9888)",
+      "report_path": "lingyuan_code/v2_code_training_results.html"
+    }
+  },
+  "summary": {
+    "total_training_time": "16068s (~4.5 hours)",
+    "total_steps": 900,
+    "models_trained": 2,
+    "avg_improvement": 12.09,
+    "key_achievements": [
+      "诗词模型loss从6.22降至5.68，改善8.7%",
+      "代码模型loss从6.23降至5.27，改善15.5%",
+      "代码模型单步loss突破5.0 (最低4.99)",
+      "两模型均使用warmup+cosine学习率调度",
+      "DeepNorm+GQA+MoE架构验证有效"
+    ]
+  }
+}

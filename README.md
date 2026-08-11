@@ -7,29 +7,33 @@
 
 ```
 lingyuan/
-├── lingyuan_train/          # 诗词语言模型训练
-│   ├── lingyuan_v7.py            # V7.0 ULTRA 核心架构
-│   ├── lingyuan_v7_trained.het   # 训练模型 (1M参数)
-│   ├── training_report.json      # 训练报告
-│   ├── training_results.html     # 可视化报告
-│   ├── consolidated_report.json  # 综合报告
+├── lingyuan_train/              # 诗词语言模型训练
+│   ├── lingyuan_v7.py                # V7.0 ULTRA 核心架构
+│   ├── lingyuan_v7_trained.het       # V1 训练模型 (1M参数)
+│   ├── lingyuan_v7_v2.het            # V2 续训模型 (1M参数)
+│   ├── training_report.json          # V2 训练报告
+│   ├── training_results.html         # V1 可视化报告
+│   ├── v2_training_results.html      # V2 可视化报告
+│   ├── v2_consolidated_report.json   # V2 综合报告
+│   ├── consolidated_report.json      # V1 综合报告
 │   ├── enhanced_training_report.json
 │   ├── v2_training_report.json
 │   ├── external_training_report.json
 │   ├── model_唐诗_enhanced.het
 │   ├── model_论语_enhanced.het
-│   ├── model_莎士比亚_enhanced.het
-│   └── train_enhanced.py
+│   └── model_莎士比亚_enhanced.het
 │
-├── lingyuan_code/           # 代码模型训练
-│   ├── lingyuan_code_v7.py       # 代码训练系统
-│   ├── lingyuan_code_v7.het      # 代码模型 (1M参数)
-│   ├── code_training_report.json
-│   ├── code_generations.json
-│   ├── code_training_results.html
+├── lingyuan_code/               # 代码模型训练
+│   ├── lingyuan_code_v7.py           # 代码训练系统
+│   ├── lingyuan_code_v7.het          # V1 代码模型 (1M参数)
+│   ├── lingyuan_code_v2.het          # V2 续训模型 (1M参数)
+│   ├── code_training_report.json     # V2 训练报告
+│   ├── code_generations.json         # 代码生成测试
+│   ├── code_training_results.html    # V1 可视化报告
+│   ├── v2_code_training_results.html # V2 可视化报告
 │   └── data/
-│       ├── humaneval.jsonl       # HumanEval 数据集
-│       └── mbpp.jsonl            # MBPP 数据集
+│       ├── humaneval.jsonl           # HumanEval 数据集
+│       └── mbpp.jsonl                # MBPP 数据集
 │
 ├── .gitignore
 └── README.md
@@ -39,37 +43,98 @@ lingyuan/
 
 | 特性 | 说明 |
 |------|------|
-| DeepNorm | 深层网络稳定训练, α=(2L)^0.25 |
-| GQA | 分组查询注意力, KV头压缩至1/4 |
-| MoE | 4专家Top-K=2路由 + SwiGLU |
+| DeepNorm | 深层网络稳定训练, α=(2L)^0.25 = 1.6818 |
+| GQA | 分组查询注意力, KV头压缩至1/4 (4:1) |
+| MoE | 4专家Top-K=2路由 + SwiGLU激活 |
 | RoPE | 旋转位置编码, θ=10000 |
 | ALiBi | 线性偏置注意力, 支持长序列外推 |
-| Sliding Window | 滑动窗口注意力, 高效长上下文 |
+| Sliding Window | 滑动窗口注意力 (window=32), 高效长上下文 |
 
 ## 模型配置
 
 - 参数量: 1,027,968 (基础: 241,536 + MoE: 786,432)
 - 层数: 4
 - 隐藏维度: 64
-- 注意力头: 4 (KV头: 1)
+- 注意力头: 4 (KV头: 1, GQA ratio: 4)
 - FFN维度: 256
 - 专家数: 4 (激活: 2)
+- DeepNorm α: 1.6818
 
 ## 训练结果
 
+### V1 初始训练
+
+| 模型 | 轮数 | 步数 | 初始Loss | 最终Loss | 改善 |
+|------|------|------|---------|---------|------|
+| 诗词 | 10 | 400 | 6.3358 | 6.2209 | 1.8% |
+| 代码 | 10 | 400 | 6.5550 | 6.2320 | 5.0% |
+
+### V2 续训结果
+
+| 模型 | 轮数 | 步数 | V1 Loss | V2 Loss | 改善 | 最低单步 |
+|------|------|------|---------|---------|------|---------|
+| 诗词 | 12 | 480 | 6.2209 | 5.6793 | 8.7% | 5.58 |
+| 代码 | 12 | 420 | 6.2320 | 5.2679 | 15.5% | 4.99 |
+
+**关键里程碑**:
+- 诗词模型: loss从6.22降至5.68, 12轮持续稳定下降
+- 代码模型: loss从6.23降至5.27, 第10轮单步loss突破5.0 (4.9888)
+- 总训练时间: ~4.5小时 (诗词7414s + 代码8654s)
+- 总训练步数: 900步
+
+### V2 训练配置
+
+| 参数 | 诗词模型 | 代码模型 |
+|------|---------|---------|
+| 学习率 | 0.005 | 0.003 |
+| LR调度 | warmup+cosine | warmup+cosine |
+| 批量大小 | 2 | 2 |
+| 序列长度 | 64 | 96 |
+| 早停耐心 | 8 | 8 |
+
+### 训练数据
+
+**诗词模型**: 内置古诗词语料 (词表300, 17序列)
+
+**代码模型**:
+- [HumanEval](https://huggingface.co/datasets/openai_humaneval) — 164样本 (OpenAI)
+- [MBPP](https://huggingface.co/datasets/google-research-datasets/mbpp) — 974样本 (Google)
+- 内置多语言代码语料 — 34样本
+- 合计: 1,172代码样本, 4,568训练序列
+
+## Loss 趋势 (V2)
+
 ### 诗词模型
-- 10轮 400步, loss 6.3358 → 6.2209
-- 续训验证: loss → 6.1032
+```
+E1: 6.196 ████████████████████████████████
+E2: 6.124 ██████████████████████████████▉
+E3: 6.012 █████████████████████████████
+E4: 5.917 ███████████████████████████▍
+E5: 5.839 ██████████████████████████▊
+E6: 5.793 ██████████████████████████
+E7: 5.751 █████████████████████████▍
+E8: 5.713 ████████████████████████▊
+E9: 5.715 ████████████████████████▊
+E10: 5.679 ████████████████████████▍ ← best
+E11: 5.685 ████████████████████████▍
+E12: 5.683 ████████████████████████▍
+```
 
 ### 代码模型
-- 数据: HumanEval(164) + MBPP(974) + 内置(34)
-- 10轮 400步, loss 6.5550 → 6.2320
-- 最低单步 loss: 5.9717
-
-## 开源数据
-
-- [HumanEval](https://huggingface.co/datasets/openai_humaneval) — OpenAI
-- [MBPP](https://huggingface.co/datasets/google-research-datasets/mbpp) — Google
+```
+E1: 6.160 ████████████████████████████████
+E2: 6.004 ██████████████████████████████▉
+E3: 5.850 █████████████████████████████
+E4: 5.701 ███████████████████████████▍
+E5: 5.603 ██████████████████████████▊
+E6: 5.516 █████████████████████████
+E7: 5.428 ████████████████████████
+E8: 5.392 ███████████████████████▊
+E9: 5.315 ██████████████████████▊
+E10: 5.297 ██████████████████████▍
+E11: 5.304 ██████████████████████▍
+E12: 5.268 ██████████████████████ ← best
+```
 
 ## License
 

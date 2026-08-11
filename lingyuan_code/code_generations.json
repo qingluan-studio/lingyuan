@@ -1,18 +1,18 @@
 [
   {
     "prompt": "def fibonacci(n):\n    ",
-    "generated": "def fibonacci(n):\n    n\"<UNK>[<UNK>n<UNK><UNK>&<UNK>iko<UNK><UNK><UNK><<UNK>[<UNK><UNK><UNK><UNK><UNK><UNK>aehX\"u<UNK>B/<UNK><UNK><UNK><UNK><UNK><UNK><UNK>]<UNK><UNK>@<UNK>(<UNK>"
+    "generated": "def fibonacci(n):\n    at\n<UNK>tiefntr:tteo:,oro\nhar()niorfu ft=tairar e:=s"
   },
   {
     "prompt": "def binary_search(arr, target):\n    ",
-    "generated": "def binary_search(arr, target):\n    <UNK>r<UNK><UNK><UNK>n<UNK><UNK>试n<UNK>ss[<UNK>d}<UNK><UNK>: <UNK>\n nn<UNK><PAD>C<UNK>F<UNK>N<UNK><UNK><UNK>.F<UNK>误\\ 误<UNK><UNK>)<UNK>f"
+    "generated": "def binary_search(arr, target):\n    \nno\nnnoh\nr((<UNK>t(el neaunrt:rtie1=,oortfi\nna=e,1u\n"
   },
   {
     "prompt": "def is_prime(n):\n    ",
-    "generated": "def is_prime(n):\n    <UNK><UNK><BOS><UNK><UNK>y<UNK>zl<UNK>i<UNK><UNK>\nN<UNK><UNK><UNK>mDs<UNK>+<UNK><PAD><UNK>ntoo]<UNK>3<UNK><UNK>oox<UNK><UNK><UNK><UNK><UNK><UNK>V<UNK><UNK><UNK>"
+    "generated": "def is_prime(n):\n    iireif=+ta]rpohtii(ci\"e(etftafuti[r=ta(((ernfa t"
   },
   {
     "prompt": "def quicksort(arr):\n    ",
-    "generated": "def quicksort(arr):\n    <UNK><UNK><UNK><UNK>[<UNK><UNK><UNK><UNK><UNK><UNK><UNK><UNK>)<UNK><UNK><UNK><UNK>j<UNK><UNK><UNK><UNK><UNK><UNK><UNK><UNK>n<UNK><UNK>n<UNK>r<UNK><UNK><UNK><UNK><UNK><UNK>r<UNK><UNK><UNK>!<UNK>^<UNK><UNK>"
+    "generated": "def quicksort(arr):\n    1nnno:ouos\n=or\nt xsmssf<UNK>s<UNK>= nsn:nrnnoortsr<UNK>l\n\ntt"
   }
 ]

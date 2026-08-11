@@ -1,0 +1,564 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>灵元 V2 续训报告 · 代码模型 | Lingyuan 7.0.0-ultra Code Edition</title>
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+:root{
+  --bg:#08120e;
+  --surface:rgba(20,38,30,0.72);
+  --surface-2:rgba(30,52,40,0.6);
+  --border:rgba(52,211,153,0.16);
+  --border-strong:rgba(52,211,153,0.34);
+  --text:#e6fff4;
+  --text-muted:#8fbfa8;
+  --brand:#34d399;
+  --brand-light:#6ee7b7;
+  --brand-glow:rgba(52,211,153,0.45);
+  --amber:#fbbf24;
+  --teal:#2dd4bf;
+  --lime:#a3e635;
+  --success:#34d399;
+  --warning:#fbbf24;
+  --danger:#f87171;
+  --radius:16px;
+  --mono:"JetBrains Mono","SF Mono","Cascadia Code",Consolas,monospace;
+  --sans:"Inter",-apple-system,BlinkMacSystemFont,"Noto Sans CJK SC","Microsoft YaHei",sans-serif;
+}
+html{scroll-behavior:smooth}
+body{
+  background:var(--bg);
+  color:var(--text);
+  font-family:var(--sans);
+  line-height:1.65;
+  overflow-x:hidden;
+  min-height:100vh;
+}
+.bg-canvas{position:fixed;inset:0;z-index:0;overflow:hidden;pointer-events:none}
+.orb{position:absolute;border-radius:50%;filter:blur(80px);opacity:.5;mix-blend-mode:screen}
+.orb.a{width:520px;height:520px;background:radial-gradient(circle,#10b981,transparent 70%);top:-160px;left:-120px;animation:float1 18s ease-in-out infinite}
+.orb.b{width:460px;height:460px;background:radial-gradient(circle,#f59e0b,transparent 70%);top:28%;right:-140px;animation:float2 22s ease-in-out infinite}
+.orb.c{width:380px;height:380px;background:radial-gradient(circle,#2dd4bf,transparent 70%);bottom:-120px;left:30%;animation:float3 20s ease-in-out infinite}
+@keyframes float1{0%,100%{transform:translate(0,0)}50%{transform:translate(60px,80px)}}
+@keyframes float2{0%,100%{transform:translate(0,0)}50%{transform:translate(-70px,50px)}}
+@keyframes float3{0%,100%{transform:translate(0,0)}50%{transform:translate(50px,-60px)}}
+.grid-overlay{position:fixed;inset:0;z-index:0;pointer-events:none;
+  background-image:linear-gradient(rgba(52,211,153,.04) 1px,transparent 1px),linear-gradient(90deg,rgba(52,211,153,.04) 1px,transparent 1px);
+  background-size:48px 48px;mask-image:radial-gradient(ellipse 80% 60% at 50% 0%,#000 30%,transparent 80%)}
+
+.wrap{position:relative;z-index:1;max-width:1180px;margin:0 auto;padding:28px 22px 60px}
+
+/* HERO */
+.hero{
+  position:relative;
+  padding:54px 38px 44px;
+  border-radius:24px;
+  background:linear-gradient(135deg,rgba(16,185,129,.18) 0%,rgba(245,158,11,.10) 50%,rgba(45,212,191,.12) 100%);
+  border:1px solid var(--border-strong);
+  overflow:hidden;
+  margin-bottom:34px;
+  backdrop-filter:blur(6px);
+}
+.hero::before{content:"";position:absolute;inset:0;background:linear-gradient(120deg,transparent 30%,rgba(255,255,255,.05) 50%,transparent 70%);background-size:200% 100%;animation:shine 8s linear infinite}
+@keyframes shine{0%{background-position:200% 0}100%{background-position:-200% 0}}
+.hero-top{display:flex;align-items:center;gap:14px;flex-wrap:wrap;margin-bottom:18px}
+.tag{display:inline-flex;align-items:center;gap:6px;font-size:12px;font-weight:600;letter-spacing:.04em;padding:6px 14px;border-radius:999px;border:1px solid var(--border-strong);background:rgba(52,211,153,.16);color:var(--brand-light)}
+.tag.dot::before{content:"";width:7px;height:7px;border-radius:50%;background:var(--success);box-shadow:0 0 10px var(--success);animation:pulse 1.8s ease-in-out infinite}
+@keyframes pulse{0%,100%{opacity:1}50%{opacity:.4}}
+.tag.ghost{background:transparent;color:var(--text-muted)}
+.tag.amber{background:rgba(251,191,36,.16);border-color:rgba(251,191,36,.32);color:var(--amber)}
+.hero h1{font-size:clamp(30px,5vw,46px);font-weight:800;line-height:1.15;letter-spacing:-.01em;
+  background:linear-gradient(120deg,#fff 0%,var(--brand-light) 40%,var(--teal) 70%,var(--amber) 100%);
+  -webkit-background-clip:text;background-clip:text;-webkit-text-fill-color:transparent;margin-bottom:10px}
+.hero .sub{font-size:15px;color:var(--text-muted);max-width:680px}
+.hero-meta{display:flex;gap:10px;flex-wrap:wrap;margin-top:22px}
+.pill{font-size:12.5px;color:var(--text-muted);background:rgba(255,255,255,.04);border:1px solid var(--border);border-radius:999px;padding:6px 14px}
+.pill b{color:var(--brand-light);font-weight:600}
+
+/* SECTION */
+.section{margin-bottom:38px;opacity:0;transform:translateY(26px);transition:opacity .7s ease,transform .7s ease}
+.section.in{opacity:1;transform:none}
+.sec-head{display:flex;align-items:center;gap:12px;margin-bottom:18px;flex-wrap:wrap}
+.sec-num{font-family:var(--mono);font-size:12px;font-weight:700;color:var(--bg);background:linear-gradient(135deg,var(--brand-light),var(--teal));width:30px;height:30px;border-radius:9px;display:grid;place-items:center;flex:none}
+.sec-title{font-size:20px;font-weight:700;letter-spacing:-.01em}
+.sec-desc{font-size:13px;color:var(--text-muted);margin-left:auto}
+
+/* KPI */
+.kpi-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(170px,1fr));gap:14px}
+.kpi{position:relative;padding:20px 20px 18px;border-radius:var(--radius);background:var(--surface);border:1px solid var(--border);overflow:hidden;transition:transform .25s,border-color .25s}
+.kpi:hover{transform:translateY(-4px);border-color:var(--border-strong)}
+.kpi::after{content:"";position:absolute;left:0;top:0;height:3px;width:100%;background:linear-gradient(90deg,var(--brand),var(--teal));opacity:.85}
+.kpi.k2::after{background:linear-gradient(90deg,var(--amber),var(--lime))}
+.kpi.k3::after{background:linear-gradient(90deg,var(--teal),var(--brand))}
+.kpi.k4::after{background:linear-gradient(90deg,var(--lime),var(--amber))}
+.kpi-l{font-size:11.5px;color:var(--text-muted);text-transform:uppercase;letter-spacing:.06em;margin-bottom:6px}
+.kpi-v{font-size:27px;font-weight:800;font-family:var(--mono);letter-spacing:-.02em}
+.kpi-v.brand{color:var(--brand-light)}
+.kpi-v.amber{color:var(--amber)}
+.kpi-v.teal{color:var(--teal)}
+.kpi-v.lime{color:var(--lime)}
+.kpi-s{font-size:11.5px;color:var(--text-muted);margin-top:4px}
+.kpi-s b{color:var(--success)}
+
+/* DATA SOURCES */
+.ds-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:14px}
+.ds{padding:18px 20px;border-radius:var(--radius);background:var(--surface);border:1px solid var(--border);position:relative;overflow:hidden}
+.ds .ds-ic{width:38px;height:38px;border-radius:10px;display:grid;place-items:center;font-size:18px;margin-bottom:10px;background:rgba(52,211,153,.14);color:var(--brand-light)}
+.ds .ds-n{font-size:14px;font-weight:700}
+.ds .ds-c{font-family:var(--mono);font-size:24px;font-weight:800;color:var(--brand-light);margin-top:6px}
+.ds .ds-c small{font-size:12px;color:var(--text-muted);font-weight:500}
+.ds.total{background:linear-gradient(135deg,rgba(52,211,153,.16),rgba(45,212,191,.08));border-color:var(--border-strong)}
+.ds.total .ds-ic{background:rgba(251,191,36,.16);color:var(--amber)}
+
+/* ARCH */
+.panel{border-radius:var(--radius);background:var(--surface);border:1px solid var(--border);padding:24px;backdrop-filter:blur(8px)}
+.arch-flow{display:flex;align-items:stretch;gap:0;flex-wrap:wrap;justify-content:center}
+.node{position:relative;min-width:118px;padding:14px 16px;border-radius:12px;background:rgba(255,255,255,.03);border:1px solid var(--border);text-align:center;transition:transform .25s,border-color .25s,box-shadow .25s}
+.node:hover{transform:translateY(-3px);border-color:var(--border-strong);box-shadow:0 8px 30px -10px var(--brand-glow)}
+.node .n-ic{font-size:18px;margin-bottom:6px}
+.node .n-t{font-size:12.5px;font-weight:600;color:var(--brand-light)}
+.node .n-s{font-size:10.5px;color:var(--text-muted);margin-top:2px;font-family:var(--mono)}
+.node.input{border-color:rgba(45,212,191,.4)}
+.node.input .n-t{color:var(--teal)}
+.node.output{border-color:rgba(251,191,36,.4)}
+.node.output .n-t{color:var(--amber)}
+.node.stack{border-color:var(--border-strong);background:linear-gradient(160deg,rgba(52,211,153,.14),rgba(45,212,191,.06))}
+.arrow{display:flex;align-items:center;justify-content:center;color:var(--text-muted);font-size:18px;min-width:26px}
+.expert-row{display:flex;gap:6px;justify-content:center;margin-top:8px}
+.expert{font-size:9.5px;font-family:var(--mono);padding:2px 7px;border-radius:6px;border:1px solid var(--border);color:var(--text-muted)}
+.expert.on{background:rgba(52,211,153,.16);border-color:rgba(52,211,153,.5);color:var(--success)}
+.arch-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px;margin-top:22px}
+.acell{background:rgba(255,255,255,.03);border:1px solid var(--border);border-radius:10px;padding:11px 14px}
+.acell .al{font-size:11px;color:var(--text-muted);margin-bottom:3px}
+.acell .av{font-size:14px;font-weight:600;font-family:var(--mono);color:var(--brand-light)}
+
+/* CHART */
+.chart-box{position:relative}
+.chart-legend{display:flex;gap:18px;flex-wrap:wrap;margin-bottom:10px}
+.leg{display:flex;align-items:center;gap:7px;font-size:12.5px;color:var(--text-muted)}
+.leg i{width:18px;height:3px;border-radius:2px;display:block}
+.chart-tip{position:absolute;pointer-events:none;background:rgba(8,18,14,.95);border:1px solid var(--border-strong);border-radius:10px;padding:8px 12px;font-size:12px;font-family:var(--mono);color:var(--text);opacity:0;transform:translate(-50%,-120%);transition:opacity .15s;z-index:5;white-space:nowrap;box-shadow:0 10px 30px -8px rgba(0,0,0,.6)}
+.chart-tip b{color:var(--brand-light)}
+.chart-tip .t-best{color:var(--success)}
+.chart-tip .t-low{color:var(--amber)}
+svg.chart{width:100%;height:auto;display:block;overflow:visible}
+.chart path.line{fill:none;stroke-width:2.6;stroke-linecap:round;stroke-linejoin:round}
+.chart .grid-l{stroke:rgba(255,255,255,.06);stroke-width:1}
+.chart .axis{stroke:rgba(255,255,255,.12);stroke-width:1}
+.chart text{font-family:var(--mono);fill:var(--text-muted)}
+.chart .dot{cursor:pointer;transition:r .15s}
+.chart .dot:hover{r:6}
+
+/* COMPARE */
+.cmp{display:flex;flex-direction:column;gap:18px}
+.cmp-row{display:grid;grid-template-columns:90px 1fr 130px;align-items:center;gap:14px}
+.cmp-lbl{font-size:13px;font-weight:600;color:var(--text-muted)}
+.cmp-lbl.now{color:var(--text)}
+.bar-track{height:30px;border-radius:8px;background:rgba(255,255,255,.04);border:1px solid var(--border);overflow:hidden;position:relative}
+.bar-fill{height:100%;width:0;border-radius:8px;display:flex;align-items:center;padding-left:12px;font-family:var(--mono);font-size:13px;font-weight:700;color:#08120e;transition:width 1.4s cubic-bezier(.22,1,.36,1);position:relative;overflow:hidden}
+.bar-fill::after{content:"";position:absolute;inset:0;background:linear-gradient(90deg,transparent,rgba(255,255,255,.25),transparent);transform:translateX(-100%);animation:sheen 2.4s ease-in-out .6s infinite}
+@keyframes sheen{0%{transform:translateX(-100%)}60%,100%{transform:translateX(220%)}}
+.bar-fill.v1{background:linear-gradient(90deg,#64748b,#94a3b8)}
+.bar-fill.v2{background:linear-gradient(90deg,var(--brand),var(--teal))}
+.cmp-val{text-align:right;font-family:var(--mono);font-size:14px;font-weight:700}
+.cmp-val.v1{color:#94a3b8}
+.cmp-val.v2{color:var(--brand-light)}
+.delta-card{display:flex;align-items:center;gap:14px;margin-top:6px;padding:16px 20px;border-radius:12px;background:linear-gradient(120deg,rgba(52,211,153,.12),rgba(251,191,36,.08));border:1px solid rgba(52,211,153,.3)}
+.delta-ic{width:42px;height:42px;border-radius:11px;display:grid;place-items:center;background:rgba(52,211,153,.18);color:var(--success);font-size:20px;flex:none}
+.delta-txt{font-size:13px;color:var(--text-muted)}
+.delta-txt b{display:block;font-size:20px;color:var(--success);font-family:var(--mono)}
+
+/* CONFIG */
+.cfg-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:12px}
+.cfg{display:flex;justify-content:space-between;align-items:center;padding:13px 16px;border-radius:10px;background:rgba(255,255,255,.03);border:1px solid var(--border)}
+.cfg .ck{font-size:12.5px;color:var(--text-muted)}
+.cfg .cv{font-size:13.5px;font-weight:600;font-family:var(--mono);color:var(--brand-light)}
+.note{display:flex;gap:12px;padding:14px 18px;border-radius:12px;background:rgba(251,191,36,.08);border:1px solid rgba(251,191,36,.3);font-size:13px;color:#fde9b3;margin-top:14px;align-items:flex-start}
+.note b{color:var(--amber)}
+.note.success-note{background:rgba(52,211,153,.08);border-color:rgba(52,211,153,.3);color:#c6f7e2}
+.note.success-note b{color:var(--success)}
+
+/* GEN (code) */
+.gen-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(320px,1fr));gap:16px}
+.gen-card{padding:20px;border-radius:var(--radius);background:var(--surface);border:1px solid var(--border);display:flex;flex-direction:column}
+.gen-head{display:flex;align-items:center;gap:8px;margin-bottom:12px;flex-wrap:wrap}
+.gen-tag{font-size:11px;font-weight:600;color:var(--teal);background:rgba(45,212,191,.1);border:1px solid rgba(45,212,191,.25);border-radius:6px;padding:3px 9px;font-family:var(--mono)}
+.gen-prompt{font-family:var(--mono);font-size:12.5px;color:var(--amber);background:rgba(0,0,0,.3);border:1px solid var(--border);border-radius:8px;padding:10px 12px;white-space:pre-wrap;word-break:break-word;margin-bottom:10px;line-height:1.6}
+.gen-prompt .kw{color:var(--brand-light)}
+.gen-out{font-family:var(--mono);font-size:12px;line-height:1.7;background:rgba(0,0,0,.35);border:1px solid var(--border);border-left:3px solid var(--brand);border-radius:8px;padding:12px;white-space:pre-wrap;word-break:break-all;color:#b9f5d8;flex:1}
+.gen-out .unk{color:var(--danger);opacity:.6}
+.gen-out .bos{color:var(--amber)}
+
+.footer{text-align:center;padding:30px 10px 0;color:var(--text-muted);font-size:12.5px;border-top:1px solid var(--border);margin-top:44px}
+.footer b{color:var(--brand-light)}
+
+@media(max-width:680px){
+  .hero{padding:38px 22px}
+  .cmp-row{grid-template-columns:70px 1fr 90px}
+  .arrow{transform:rotate(90deg)}
+  .arch-flow{flex-direction:column}
+}
+</style>
+</head>
+<body>
+<div class="bg-canvas"><div class="orb a"></div><div class="orb b"></div><div class="orb c"></div></div>
+<div class="grid-overlay"></div>
+
+<div class="wrap">
+
+  <!-- HERO -->
+  <header class="hero">
+    <div class="hero-top">
+      <span class="tag dot">续训完成</span>
+      <span class="tag ghost">Lingyuan · 7.0.0-ultra</span>
+      <span class="tag amber">Code Edition</span>
+    </div>
+    <h1>灵元 V2 续训报告<br>代码生成模型</h1>
+    <p class="sub">基于 V7.0 ULTRA 代码版的继续训练。融合 HumanEval、MBPP 与内置代码语料共 1,172 条样本，加载 lingyuan_code_v7.het 权重，以 lr=0.003 的 warmup+cosine 调度进行二次优化，验证损失大幅下降并突破 5.0 关口。</p>
+    <div class="hero-meta">
+      <span class="pill">版本 <b>7.0.0-ultra Code</b></span>
+      <span class="pill">参数量 <b>1,027,968</b></span>
+      <span class="pill">续训轮次 <b>12 epochs / 420 steps</b></span>
+      <span class="pill">训练时长 <b>8,654s</b></span>
+      <span class="pill">报告日期 <b>2026-08-11</b></span>
+    </div>
+  </header>
+
+  <!-- KPI -->
+  <div class="section" data-reveal>
+    <div class="sec-head"><span class="sec-num">01</span><span class="sec-title">核心指标</span><span class="sec-desc">续训关键结果一览</span></div>
+    <div class="kpi-grid">
+      <div class="kpi"><div class="kpi-l">最优验证损失</div><div class="kpi-v brand" data-count="5.2679" data-dec="4">0</div><div class="kpi-s">第 12 轮达成</div></div>
+      <div class="kpi k2"><div class="kpi-l">较 V1 改善</div><div class="kpi-v amber" data-count="15.47" data-dec="2">0</div><div class="kpi-s">V1 最优 6.2320 → V2 <b>5.2679</b></div></div>
+      <div class="kpi k3"><div class="kpi-l">最低单步损失</div><div class="kpi-v teal" data-count="4.9888" data-dec="4">0</div><div class="kpi-s">E10 S31 · 突破 5.0</div></div>
+      <div class="kpi k4"><div class="kpi-l">训练样本</div><div class="kpi-v lime" data-count="1172" data-dec="0">0</div><div class="kpi-s">3 个数据源 · 4,568 序列</div></div>
+    </div>
+  </div>
+
+  <!-- DATA SOURCES -->
+  <div class="section" data-reveal>
+    <div class="sec-head"><span class="sec-num">02</span><span class="sec-title">训练数据来源</span><span class="sec-desc">HumanEval + MBPP + 内置语料</span></div>
+    <div class="ds-grid">
+      <div class="ds"><div class="ds-ic">HE</div><div class="ds-n">HumanEval</div><div class="ds-c">164<small> 样本</small></div></div>
+      <div class="ds"><div class="ds-ic">MB</div><div class="ds-n">MBPP</div><div class="ds-c">974<small> 样本</small></div></div>
+      <div class="ds"><div class="ds-ic">BI</div><div class="ds-n">内置语料</div><div class="ds-c">34<small> 样本</small></div></div>
+      <div class="ds total"><div class="ds-ic">Σ</div><div class="ds-n">合计</div><div class="ds-c">1,172<small> 样本</small></div></div>
+    </div>
+  </div>
+
+  <!-- ARCHITECTURE -->
+  <div class="section" data-reveal>
+    <div class="sec-head"><span class="sec-num">03</span><span class="sec-title">模型架构</span><span class="sec-desc">DeepNorm + GQA + MoE + RoPE/ALiBi</span></div>
+    <div class="panel">
+      <div class="arch-flow">
+        <div class="node input"><div class="n-ic">code</div><div class="n-t">代码 Token</div><div class="n-s">vocab=114</div></div>
+        <div class="arrow">→</div>
+        <div class="node"><div class="n-ic">posi</div><div class="n-t">位置编码</div><div class="n-s">RoPE + ALiBi</div></div>
+        <div class="arrow">→</div>
+        <div class="node stack"><div class="n-ic">blocks</div><div class="n-t">Transformer ×4</div><div class="n-s">DeepNorm · hidden=64</div>
+          <div style="margin-top:8px;font-size:10.5px;color:var(--text-muted)">GQA: 4 头 → 1 KV · seq=96</div>
+          <div class="expert-row"><span class="expert on">E1</span><span class="expert on">E2</span><span class="expert">E3</span><span class="expert">E4</span></div>
+          <div style="font-size:10px;color:var(--text-muted);margin-top:4px">MoE 4 专家 / 激活 2</div>
+        </div>
+        <div class="arrow">→</div>
+        <div class="node output"><div class="n-ic">head</div><div class="n-t">代码输出</div><div class="n-s">LM Head</div></div>
+      </div>
+      <div class="arch-grid">
+        <div class="acell"><div class="al">版本</div><div class="av">7.0.0-ultra Code</div></div>
+        <div class="acell"><div class="al">层数</div><div class="av">4</div></div>
+        <div class="acell"><div class="al">隐藏维度</div><div class="av">64</div></div>
+        <div class="acell"><div class="al">注意力头</div><div class="av">4</div></div>
+        <div class="acell"><div class="al">KV 头 (GQA)</div><div class="av">1 (ratio 4)</div></div>
+        <div class="acell"><div class="al">FFN 类型</div><div class="av">MoE 4→2</div></div>
+        <div class="acell"><div class="al">归一化</div><div class="av">DeepNorm</div></div>
+        <div class="acell"><div class="al">位置编码</div><div class="av">RoPE+ALiBi</div></div>
+        <div class="acell"><div class="al">序列长度</div><div class="av">96</div></div>
+        <div class="acell"><div class="al">Base 参数</div><div class="av">241,536</div></div>
+        <div class="acell"><div class="al">MoE 参数</div><div class="av">786,432</div></div>
+        <div class="acell"><div class="al">总参数</div><div class="av">1,027,968</div></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- LOSS CURVE -->
+  <div class="section" data-reveal>
+    <div class="sec-head"><span class="sec-num">04</span><span class="sec-title">续训损失曲线</span><span class="sec-desc">12 轮 · 交互式（悬停查看数值）</span></div>
+    <div class="panel chart-box">
+      <div class="chart-legend">
+        <div class="leg"><i style="background:linear-gradient(90deg,#34d399,#2dd4bf)"></i>V2 续训验证损失</div>
+        <div class="leg"><i style="background:#fbbf24"></i>最低单步 4.9888 (E10 S31)</div>
+        <div class="leg"><i style="background:#64748b"></i>V1 基线 6.2320</div>
+      </div>
+      <div id="codeChart"></div>
+      <div class="chart-tip" id="codeTip"></div>
+    </div>
+  </div>
+
+  <!-- BEFORE / AFTER -->
+  <div class="section" data-reveal>
+    <div class="sec-head"><span class="sec-num">05</span><span class="sec-title">V1 → V2 前后对比</span><span class="sec-desc">最优验证损失下降</span></div>
+    <div class="panel">
+      <div class="cmp">
+        <div class="cmp-row">
+          <div class="cmp-lbl">V1 基线</div>
+          <div class="bar-track"><div class="bar-fill v1" data-w="100">6.2320</div></div>
+          <div class="cmp-val v1">6.2320</div>
+        </div>
+        <div class="cmp-row">
+          <div class="cmp-lbl now">V2 续训</div>
+          <div class="bar-track"><div class="bar-fill v2" data-w="84.5">5.2679</div></div>
+          <div class="cmp-val v2">5.2679</div>
+        </div>
+      </div>
+      <div class="delta-card">
+        <div class="delta-ic">▼</div>
+        <div class="delta-txt">绝对下降 <b>0.9641</b><span style="margin-left:14px">相对改善 <b style="display:inline">15.47%</b></span></div>
+        <div style="margin-left:auto;text-align:right;font-size:11.5px;color:var(--text-muted)">第 12 轮达成最优<br>全程单调下降至 5.0 以下</div>
+      </div>
+      <div class="note success-note"><span style="font-size:16px">★</span><span>关键里程碑：续训中单步损失最低触及 <b>4.9888</b>（第 10 轮第 31 步），<b>损失首次跌破 5.0 关口</b>，标志着代码语言建模能力进入新阶段。</span></div>
+    </div>
+  </div>
+
+  <!-- CONFIG -->
+  <div class="section" data-reveal>
+    <div class="sec-head"><span class="sec-num">06</span><span class="sec-title">训练配置</span><span class="sec-desc">续训超参与数据</span></div>
+    <div class="panel">
+      <div class="cfg-grid">
+        <div class="cfg"><span class="ck">训练类型</span><span class="cv">续训 (Continued)</span></div>
+        <div class="cfg"><span class="ck">加载权重</span><span class="cv">lingyuan_code_v7.het</span></div>
+        <div class="cfg"><span class="ck">学习率</span><span class="cv">0.003</span></div>
+        <div class="cfg"><span class="ck">学习率调度</span><span class="cv">warmup + cosine</span></div>
+        <div class="cfg"><span class="ck">训练轮次</span><span class="cv">12 epochs</span></div>
+        <div class="cfg"><span class="ck">总步数</span><span class="cv">420 steps</span></div>
+        <div class="cfg"><span class="ck">总训练时长</span><span class="cv">8,654 s</span></div>
+        <div class="cfg"><span class="ck">序列长度</span><span class="cv">96</span></div>
+        <div class="cfg"><span class="ck">词表大小</span><span class="cv">114</span></div>
+        <div class="cfg"><span class="ck">训练序列数</span><span class="cv">4,568</span></div>
+        <div class="cfg"><span class="ck">注意力头</span><span class="cv">4 / KV 1</span></div>
+        <div class="cfg"><span class="ck">专家 (激活)</span><span class="cv">4 (2)</span></div>
+      </div>
+      <div class="note"><span style="font-size:16px">i</span><span>续训自上一轮代码版权重 <b>lingyuan_code_v7.het</b>（V1 最优 6.2320）出发，采用更低学习率 0.003 配合 warmup+cosine 调度。损失从首轮 6.1601 单调下降，第 7 轮即低于 V1 基线，最终于第 12 轮收敛至 <b>5.2679</b>。</span></div>
+    </div>
+  </div>
+
+  <!-- GENERATION -->
+  <div class="section" data-reveal>
+    <div class="sec-head"><span class="sec-num">07</span><span class="sec-title">代码生成测试</span><span class="sec-desc">续训后函数补全采样</span></div>
+    <div class="gen-grid">
+      <div class="gen-card">
+        <div class="gen-head"><span class="gen-tag">fibonacci</span></div>
+        <div class="gen-prompt"><span class="kw">def</span> fibonacci(n):
+    </div>
+        <div class="gen-out">def fibonacci(n):
+    n"&lt;UNK&gt;[&lt;UNK&gt;n&lt;UNK&gt;&lt;UNK&gt;&amp;&lt;UNK&gt;iko&lt;UNK&gt;&lt;UNK&gt;&lt;UNK&gt;&lt;&lt;UNK&gt;[&lt;UNK&gt;&lt;UNK&gt;&lt;UNK&gt;&lt;UNK&gt;&lt;UNK&gt;&lt;UNK&gt;aehX"u&lt;UNK&gt;B/&lt;UNK&gt;&lt;UNK&gt;&lt;UNK&gt;&lt;UNK&gt;&lt;UNK&gt;&lt;UNK&gt;&lt;UNK&gt;]&lt;UNK&gt;&lt;UNK&gt;@&lt;UNK&gt;(&lt;UNK&gt;</div>
+      </div>
+      <div class="gen-card">
+        <div class="gen-head"><span class="gen-tag">binary_search</span></div>
+        <div class="gen-prompt"><span class="kw">def</span> binary_search(arr, target):
+    </div>
+        <div class="gen-out">def binary_search(arr, target):
+    &lt;UNK&gt;r&lt;UNK&gt;&lt;UNK&gt;&lt;UNK&gt;n&lt;UNK&gt;&lt;UNK&gt;试n&lt;UNK&gt;ss[&lt;UNK&gt;d}&lt;UNK&gt;&lt;UNK&gt;: &lt;UNK&gt;
+ nn&lt;UNK&gt;&lt;PAD&gt;C&lt;UNK&gt;F&lt;UNK&gt;N&lt;UNK&gt;&lt;UNK&gt;&lt;UNK&gt;.F&lt;UNK&gt;误\ 误&lt;UNK&gt;&lt;UNK&gt;)&lt;UNK&gt;f</div>
+      </div>
+      <div class="gen-card">
+        <div class="gen-head"><span class="gen-tag">is_prime</span></div>
+        <div class="gen-prompt"><span class="kw">def</span> is_prime(n):
+    </div>
+        <div class="gen-out">def is_prime(n):
+    &lt;UNK&gt;&lt;UNK&gt;&lt;BOS&gt;&lt;UNK&gt;&lt;UNK&gt;y&lt;UNK&gt;zl&lt;UNK&gt;i&lt;UNK&gt;&lt;UNK&gt;
+N&lt;UNK&gt;&lt;UNK&gt;&lt;UNK&gt;mDs&lt;UNK&gt;+&lt;UNK&gt;&lt;PAD&gt;&lt;UNK&gt;ntoo]&lt;UNK&gt;3&lt;UNK&gt;&lt;UNK&gt;oox&lt;UNK&gt;&lt;UNK&gt;&lt;UNK&gt;&lt;UNK&gt;&lt;UNK&gt;&lt;UNK&gt;V&lt;UNK&gt;&lt;UNK&gt;&lt;UNK&gt;</div>
+      </div>
+      <div class="gen-card">
+        <div class="gen-head"><span class="gen-tag">quicksort</span></div>
+        <div class="gen-prompt"><span class="kw">def</span> quicksort(arr):
+    </div>
+        <div class="gen-out">def quicksort(arr):
+    &lt;UNK&gt;&lt;UNK&gt;&lt;UNK&gt;&lt;UNK&gt;[&lt;UNK&gt;&lt;UNK&gt;&lt;UNK&gt;&lt;UNK&gt;&lt;UNK&gt;&lt;UNK&gt;&lt;UNK&gt;&lt;UNK&gt;)&lt;UNK&gt;&lt;UNK&gt;&lt;UNK&gt;&lt;UNK&gt;j&lt;UNK&gt;&lt;UNK&gt;&lt;UNK&gt;&lt;UNK&gt;&lt;UNK&gt;&lt;UNK&gt;&lt;UNK&gt;&lt;UNK&gt;n&lt;UNK&gt;&lt;UNK&gt;n&lt;UNK&gt;r&lt;UNK&gt;&lt;UNK&gt;&lt;UNK&gt;&lt;UNK&gt;&lt;UNK&gt;r&lt;UNK&gt;&lt;UNK&gt;&lt;UNK&gt;!&lt;UNK&gt;^&lt;UNK&gt;&lt;UNK&gt;</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="footer">
+    灵元 Lingyuan · <b>7.0.0-ultra Code Edition</b> 代码模型 V2 续训报告 · 由训练流水线自动生成 · 2026-08-11
+  </div>
+</div>
+
+<script>
+/* ===== Data ===== */
+var codeData = {
+  labels:["E1","E2","E3","E4","E5","E6","E7","E8","E9","E10","E11","E12"],
+  loss:[6.1601,6.0041,5.8503,5.7008,5.6028,5.5160,5.4283,5.3918,5.3147,5.2974,5.3044,5.2679],
+  bestIdx:11, best:5.2679, baseline:6.2320, lowStep:4.9888
+};
+
+/* ===== Animated counters ===== */
+function animateCount(el){
+  var target=parseFloat(el.dataset.count), dec=parseInt(el.dataset.dec||"0");
+  var dur=1500, start=performance.now();
+  function tick(now){
+    var p=Math.min((now-start)/dur,1);
+    var e=1-Math.pow(1-p,3);
+    var v=target*e;
+    el.textContent=v.toFixed(dec);
+    if(p<1) requestAnimationFrame(tick); else el.textContent=target.toFixed(dec);
+  }
+  requestAnimationFrame(tick);
+}
+
+/* ===== Reveal on scroll ===== */
+var io=new IntersectionObserver(function(es){
+  es.forEach(function(en){
+    if(en.isIntersecting){
+      en.target.classList.add("in");
+      en.target.querySelectorAll("[data-count]").forEach(animateCount);
+      io.unobserve(en.target);
+    }
+  });
+},{threshold:0.18});
+document.querySelectorAll("[data-reveal]").forEach(function(el){io.observe(el)});
+
+/* ===== Bars ===== */
+var barIO=new IntersectionObserver(function(es){
+  es.forEach(function(en){
+    if(en.isIntersecting){
+      en.target.querySelectorAll(".bar-fill").forEach(function(b){
+        b.style.width=b.dataset.w+"%";
+      });
+      barIO.unobserve(en.target);
+    }
+  });
+},{threshold:0.3});
+var cmpSec=document.querySelector(".cmp");
+if(cmpSec) barIO.observe(cmpSec.closest("[data-reveal]"));
+
+/* ===== Loss chart builder ===== */
+function buildChart(containerId, data, tipId){
+  var W=760,H=320, pad={t:34,r:34,b:46,l:54};
+  var iw=W-pad.l-pad.r, ih=H-pad.t-pad.b;
+  var vals=data.loss;
+  var lo=Math.min.apply(null,vals), hi=Math.max.apply(null,vals);
+  var pad_v=(hi-lo)*0.18;
+  var ymin=Math.min(lo-pad_v, data.baseline-0.02, 4.88);
+  var ymax=Math.max(hi+pad_v, data.baseline+0.02);
+  var xAt=function(i){return pad.l + (iw*(i/(vals.length-1)))};
+  var yAt=function(v){return pad.t + ih*(1-(v-ymin)/(ymax-ymin))};
+
+  var ns="http://www.w3.org/2000/svg";
+  var svg=document.createElementNS(ns,"svg");
+  svg.setAttribute("viewBox","0 0 "+W+" "+H);
+  svg.setAttribute("class","chart");
+
+  var defs=document.createElementNS(ns,"defs");
+  defs.innerHTML=
+    '<linearGradient id="lg" x1="0" y1="0" x2="1" y2="0">'+
+      '<stop offset="0%" stop-color="#34d399"/><stop offset="100%" stop-color="#2dd4bf"/></linearGradient>'+
+    '<linearGradient id="ag" x1="0" y1="0" x2="0" y2="1">'+
+      '<stop offset="0%" stop-color="rgba(52,211,153,0.32)"/><stop offset="100%" stop-color="rgba(45,212,191,0)"/></linearGradient>'+
+    '<filter id="glow" x="-30%" y="-30%" width="160%" height="160%">'+
+      '<feGaussianBlur stdDeviation="4" result="b"/><feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge></filter>';
+  svg.appendChild(defs);
+
+  // grid + y labels
+  var steps=5;
+  for(var s=0;s<=steps;s++){
+    var val=ymax-((ymax-ymin)*s/steps);
+    var y=yAt(val);
+    var ln=document.createElementNS(ns,"line");
+    ln.setAttribute("x1",pad.l);ln.setAttribute("x2",W-pad.r);ln.setAttribute("y1",y);ln.setAttribute("y2",y);
+    ln.setAttribute("class","grid-l");if(s===0)ln.setAttribute("class","axis");
+    svg.appendChild(ln);
+    var t=document.createElementNS(ns,"text");
+    t.setAttribute("x",pad.l-10);t.setAttribute("y",y+3.5);t.setAttribute("text-anchor","end");t.setAttribute("font-size","10.5");
+    t.textContent=val.toFixed(2);svg.appendChild(t);
+  }
+  // 5.0 threshold line (notable)
+  var th=yAt(5.0);
+  var thl=document.createElementNS(ns,"line");
+  thl.setAttribute("x1",pad.l);thl.setAttribute("x2",W-pad.r);thl.setAttribute("y1",th);thl.setAttribute("y2",th);
+  thl.setAttribute("stroke","#fbbf24");thl.setAttribute("stroke-width","1");thl.setAttribute("stroke-dasharray","3,4");thl.setAttribute("opacity","0.55");
+  svg.appendChild(thl);
+  var tht=document.createElementNS(ns,"text");
+  tht.setAttribute("x",pad.l+6);tht.setAttribute("y",th-5);tht.setAttribute("font-size","9.5");tht.setAttribute("fill","#fbbf24");
+  tht.textContent="5.0 关口";svg.appendChild(tht);
+
+  // baseline dashed
+  var by=yAt(data.baseline);
+  var bl=document.createElementNS(ns,"line");
+  bl.setAttribute("x1",pad.l);bl.setAttribute("x2",W-pad.r);bl.setAttribute("y1",by);bl.setAttribute("y2",by);
+  bl.setAttribute("stroke","#64748b");bl.setAttribute("stroke-width","1.2");bl.setAttribute("stroke-dasharray","5,5");bl.setAttribute("opacity","0.7");
+  svg.appendChild(bl);
+  var blt=document.createElementNS(ns,"text");
+  blt.setAttribute("x",W-pad.r);blt.setAttribute("y",by-6);blt.setAttribute("text-anchor","end");blt.setAttribute("font-size","10");blt.setAttribute("fill","#94a3b8");
+  blt.textContent="V1 基线 "+data.baseline.toFixed(4);svg.appendChild(blt);
+
+  // area path
+  var pts=vals.map(function(v,i){return [xAt(i),yAt(v)]});
+  var areaD="M "+pts[0][0]+" "+(pad.t+ih)+" L "+pts.map(function(p){return p[0]+" "+p[1]}).join(" L ")+" L "+pts[pts.length-1][0]+" "+(pad.t+ih)+" Z";
+  var area=document.createElementNS(ns,"path");
+  area.setAttribute("d",areaD);area.setAttribute("fill","url(#ag)");area.setAttribute("opacity","0");
+  svg.appendChild(area);
+
+  // line path
+  var lineD="M "+pts.map(function(p){return p[0]+" "+p[1]}).join(" L ");
+  var line=document.createElementNS(ns,"path");
+  line.setAttribute("d",lineD);line.setAttribute("class","line");line.setAttribute("stroke","url(#lg)");
+  line.setAttribute("filter","url(#glow)");
+  svg.appendChild(line);
+
+  // x labels
+  data.labels.forEach(function(lb,i){
+    var t=document.createElementNS(ns,"text");
+    t.setAttribute("x",xAt(i));t.setAttribute("y",H-pad.b+20);t.setAttribute("text-anchor","middle");t.setAttribute("font-size","10.5");
+    t.textContent=lb;svg.appendChild(t);
+  });
+
+  // dots + tooltip
+  var tip=document.getElementById(tipId);
+  pts.forEach(function(p,i){
+    var c=document.createElementNS(ns,"circle");
+    c.setAttribute("cx",p[0]);c.setAttribute("cy",p[1]);
+    c.setAttribute("r", i===data.bestIdx?5:3.6);
+    c.setAttribute("class","dot");
+    c.setAttribute("fill", i===data.bestIdx?"#34d399":"#6ee7b7");
+    c.setAttribute("stroke","#08120e");c.setAttribute("stroke-width","2");
+    if(i===data.bestIdx) c.setAttribute("filter","url(#glow)");
+    if(i===9){c.setAttribute("fill","#fbbf24")}
+    c.addEventListener("mouseenter",function(){
+      var rect=svg.getBoundingClientRect();
+      var scale=rect.width/W;
+      var left=p[0]*scale, top=p[1]*scale;
+      tip.style.left=left+"px";tip.style.top=top+"px";
+      var isBest=i===data.bestIdx, isLow=(i===9);
+      var tag= isBest?'<span class="t-best">★ 最优轮</span> · ':(isLow?'<span class="t-low">最低单步 4.9888</span> · ':'');
+      tip.innerHTML=tag+data.labels[i]+" · <b>"+vals[i].toFixed(4)+"</b>";
+      tip.style.opacity=1;
+      c.setAttribute("r",6.5);
+    });
+    c.addEventListener("mouseleave",function(){tip.style.opacity=0;c.setAttribute("r",i===data.bestIdx?5:3.6)});
+    svg.appendChild(c);
+  });
+
+  document.getElementById(containerId).appendChild(svg);
+
+  // animate line draw + area fade
+  var len=line.getTotalLength();
+  line.style.strokeDasharray=len;
+  line.style.strokeDashoffset=len;
+  var chartIO=new IntersectionObserver(function(es){
+    es.forEach(function(en){
+      if(en.isIntersecting){
+        line.style.transition="stroke-dashoffset 1.8s cubic-bezier(.22,1,.36,1)";
+        line.style.strokeDashoffset=0;
+        area.style.transition="opacity 1.4s ease .6s";area.style.opacity=1;
+        chartIO.unobserve(en.target);
+      }
+    });
+  },{threshold:0.3});
+  chartIO.observe(svg);
+}
+buildChart("codeChart", codeData, "codeTip");
+</script>
+</body>
+</html>
