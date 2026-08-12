@@ -1,98 +1,89 @@
 #!/usr/bin/env python3
-"""灵元大模型 — 测试运行器
+# -*- coding: utf-8 -*-
+"""灵元大模型 — 测试运行器（零第三方依赖）
 
-统一执行全部模块的测试套件。
+运行 tests/ 下全部真实测试：
+  - test_gradients   数值梯度检验（解析梯度 vs 中心差分，证明反向传播真实）
+  - test_training    训练真实性（loss 下降、参数确实更新）
+  - test_save_load   模型保存/加载往返一致性
+  - test_generation  自回归生成与 tokenizer 往返
+  - test_code_model  代码模型全链路冒烟
+
 用法: python run_tests.py
+退出码: 0=全部通过, 1=存在失败
 """
-
-import sys
 import os
-import importlib
+import sys
+import time
+import traceback
+import importlib.util
 
-# 确保工作目录在路径中
-sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+HERE = os.path.dirname(os.path.abspath(__file__))
+TESTS_DIR = os.path.join(HERE, "tests")
+
+
+def load_module(path):
+    name = os.path.splitext(os.path.basename(path))[0]
+    spec = importlib.util.spec_from_file_location(name, path)
+    mod = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(mod)
+    return mod
+
 
 def main():
-    """加载所有模块并运行测试"""
-    print("=" * 60)
-    print("灵元大模型 — 全局测试运行器")
-    print("=" * 60)
+    print("=" * 62)
+    print("灵元大模型 — 测试套件（全部为真实行为验证，无模拟指标）")
+    print("=" * 62)
 
-    # ---- 第一阶段: exec 加载核心模块 (part2~part16) 到共享命名空间 ----
-    # 这些模块相互引用, 需要共享全局空间
-    core_modules = [
-        "lingyuan_full.py",
-        "part2.py",
-        "part3.py",
-        "part4.py",
-        "part6.py",   # 融合决策引擎 (part5依赖其FusionDecisionEngine)
-        "part7.py",   # 安全/可观测/API/注册/课程/经济/知识图谱
-        "part8.py",   # 联邦学习/蒸馏/RLHF/量化/向量库/提示工程/边缘/记忆
-        "part9.py",   # 模型本体: Transformer/Tokenizer/位置编码/采样/KVCache/训练引擎
-        "part10.py",  # 外部知识接入: 连接器/解析/爬虫/脱敏/版权/训练接口/教师/去重
-        "part11.py",  # 推理服务: 引擎/批处理/流式/缓存/FunctionCall/ChatTemplate
-        "part12.py",  # 模型格式: 序列化/HF导出/ONNX/GGUF/外部导入
-        "part13.py",  # 微调: LoRA/全参数/SFT/DPO/持续学习/领域适配
-        "part14.py",  # API服务: HTTP/OpenAI兼容/WebSocket/gRPC/文档/SDK
-        "part15.py",  # MLOps: 实验追踪/任务队列/GPU调度/监控/对比
-        "part16.py",  # UI+安全: WebChat/Playground/训练面板/水印/APIKey/血缘
-    ]
+    test_files = sorted(
+        f for f in os.listdir(TESTS_DIR)
+        if f.startswith("test_") and f.endswith(".py")
+    )
 
-    # ---- 第二阶段: 正常 import 扩展模块 (part17~part29) ----
-    # 这些模块通过 part5.py 的延迟导入按需加载, 不进入共享命名空间
-    # 避免类名冲突 (如 InferenceEngine, CurriculumScheduler 等)
-    extension_modules = [
-        "part17", "part18", "part19", "part20", "part21",
-        "part22", "part23", "part24", "part25", "part26",
-        "part27", "part28", "part29",
-    ]
+    total, passed, failed = 0, 0, []
+    t_start = time.time()
 
-    base_dir = os.path.dirname(os.path.abspath(__file__))
-
-    # 加载核心模块 (exec 到共享全局空间)
-    for mod_file in core_modules:
-        path = os.path.join(base_dir, mod_file)
-        if os.path.exists(path):
-            print(f"  [加载] {mod_file}")
-            saved_name = globals().get('__name__', '__main__')
-            globals()['__name__'] = mod_file.replace('.py', '_loaded')
-            with open(path, 'r', encoding='utf-8') as f:
-                exec(f.read(), globals())
-            globals()['__name__'] = saved_name
-        else:
-            print(f"  [跳过] {mod_file} (不存在)")
-
-    # 预导入扩展模块 (验证语法和依赖, 但不污染全局命名空间)
-    for mod_name in extension_modules:
+    for fname in test_files:
+        path = os.path.join(TESTS_DIR, fname)
+        print(f"\n▶ {fname}")
         try:
-            importlib.import_module(mod_name)
-            print(f"  [导入] {mod_name}.py")
-        except Exception as e:
-            print(f"  [警告] {mod_name}.py 导入失败: {e}")
+            mod = load_module(path)
+        except Exception:
+            print(f"  ✗ 模块加载失败")
+            traceback.print_exc()
+            failed.append((fname, "<import>"))
+            total += 1
+            continue
 
-    # 加载 part5.py (编排器, 引用核心模块的类 + 延迟导入扩展模块)
-    part5_path = os.path.join(base_dir, "part5.py")
-    if os.path.exists(part5_path):
-        print(f"  [加载] part5.py")
-        saved_name = globals().get('__name__', '__main__')
-        globals()['__name__'] = 'part5_loaded'
-        with open(part5_path, 'r', encoding='utf-8') as f:
-            exec(f.read(), globals())
-        globals()['__name__'] = saved_name
-    else:
-        print(f"  [跳过] part5.py (不存在)")
+        test_fns = [(n, fn) for n, fn in vars(mod).items()
+                    if n.startswith("test_") and callable(fn)]
+        for name, fn in test_fns:
+            total += 1
+            t0 = time.time()
+            try:
+                detail = fn()
+                dt = time.time() - t0
+                passed += 1
+                print(f"  ✓ {name} ({dt:.1f}s)")
+                if detail:
+                    print(f"      {detail}")
+            except Exception as e:
+                dt = time.time() - t0
+                failed.append((fname, name))
+                print(f"  ✗ {name} ({dt:.1f}s): {e}")
+                traceback.print_exc()
 
-    # 运行测试
-    sys.argv = [sys.argv[0], "test"]
-    if 'main' in globals() and callable(globals()['main']):
-        result = globals()['main']()
-        if result and isinstance(result, dict):
-            failed = result.get("failed", 0)
-            sys.exit(1 if failed > 0 else 0)
-        sys.exit(0)
-    else:
-        print("[错误] 未找到 main() 入口")
+    dt_all = time.time() - t_start
+    print("\n" + "=" * 62)
+    print(f"结果: {passed}/{total} 通过, 用时 {dt_all:.1f}s")
+    if failed:
+        print("失败项:")
+        for f, n in failed:
+            print(f"  - {f}::{n}")
+        print("=" * 62)
         sys.exit(1)
+    print("全部通过 — 核心模型的训练/推理/保存均为真实实现")
+    print("=" * 62)
 
 
 if __name__ == "__main__":

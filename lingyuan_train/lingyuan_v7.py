@@ -1477,8 +1477,7 @@ def main():
     parser.add_argument("--prompt", type=str, default="春眠不觉晓")
     args = parser.parse_args()
 
-    output_dir = "/workspace/lingyuan_train"
-    os.makedirs(output_dir, exist_ok=True)
+    output_dir = os.path.dirname(os.path.abspath(__file__))
 
     if args.generate:
         # 生成模式

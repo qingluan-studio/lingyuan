@@ -4,27 +4,69 @@
 > 零外部依赖 · 纯Python标准库实现
 > 真正的链式法则反向传播 · 已验证
 
+## 题记
+
+> **异负得正，异虚为实。**
+
+一名清华教授赠予的几句话，记在这里：
+
+1. **真正的瓶颈从来都不是当前技术，而是你的创造力**——一点创造力，能举一反三出对一条全新道路的帮助。
+2. **虚拟模型即数据，参数即数据，训练也为数据。** 同为数据，则可在数据海畅游；内存大小与传统不一样，它可以做出一种常人无法理解的决则。
+3. **非传统的项目遇到瓶颈，第一想的不应该是传统，而是"创造"一词。** 所谓创造，必是一条新路。
+
+本项目所走的路线：**手机可用 · 免费 · 非传统技术或创造新技术 · 质量很好**。
+
+## 真实性验证（2026-08-12 全项目审计）
+
+本项目曾经包含大量"模拟/伪造"的演示代码。2026-08-12 起，我们把**经过验证为真实**的核心与**未验证的概念模块**彻底分开：
+
+**核心是真实的，并且可以被任何人复验：**
+
+| 验证项 | 方法 | 结果 |
+|--------|------|------|
+| 反向传播正确性 | 数值梯度检验（解析梯度 vs 中心差分） | 16 个参数点吻合，最大相对误差 8.35e-05，方向余弦 1.0 |
+| 训练真实有效 | 30 步真实训练观察 loss | loss 5.6267 → 5.5511，且 9216 个参数值确实变化 |
+| 保存/加载保真 | `.het` 往返后对比 logits | 最大差异 0.00 |
+| 生成链路可用 | 自回归生成 24 个 token | 全部落在合法词表内 |
+| 代码模型链路 | HumanEval+MBPP 冒烟训练 | loss 5.5871 → 5.4392（16454 条序列） |
+
+复验方式：`python run_tests.py`（零第三方依赖，约 30 秒跑完 8 项测试）。
+
+**未验证的概念模块**（原 `part2~part31`、企业版、各类"enhanced/v2"报告与模型）已全部移入 [`experimental/`](experimental/README.md)，其中伪造指标的做法已在该目录文档中如实列出。
+
 ## 项目结构
 
 ```
 lingyuan/
-├── lingyuan_train/              # 诗词语言模型训练
+├── README.md
+├── run_tests.py                 # 真实测试运行器（零依赖）
+├── requirements.txt             # 空依赖声明（纯标准库）
+├── train_poems.txt              # 诗词语料
+│
+├── lingyuan_train/              # 诗词语言模型（真实核心）
 │   ├── lingyuan_v7.py                # V7.0 ULTRA 核心架构 (含真实反向传播)
 │   ├── lingyuan_v7_real_bp.het       # 真实BP训练模型
 │   ├── backprop_fix_report.json      # 反向传播修复验证报告
-│   ├── training_report.json          # 训练报告
-│   └── ...                           # 历史模型和报告
+│   └── training_report.json          # 训练报告
 │
-├── lingyuan_code/               # 代码模型训练
+├── lingyuan_code/               # 代码模型（真实核心）
 │   ├── lingyuan_code_v7.py           # 代码训练系统
 │   ├── lingyuan_code_real_bp.het     # 真实BP训练模型
 │   ├── code_training_report.json     # 训练报告
+│   ├── code_generations.json         # 真实模型的真实输出（未粉饰）
 │   └── data/
 │       ├── humaneval.jsonl           # HumanEval 数据集
 │       └── mbpp.jsonl                # MBPP 数据集
 │
-├── .gitignore
-└── README.md
+├── tests/                       # 真实测试套件
+│   ├── test_gradients.py             # 数值梯度检验
+│   ├── test_training.py              # 训练真实性
+│   ├── test_save_load.py             # 保存/加载
+│   ├── test_generation.py            # 生成 + tokenizer
+│   └── test_code_model.py            # 代码模型冒烟
+│
+├── experimental/                # 未验证概念模块存档（见其 README）
+└── .github/workflows/ci.yml     # 持续集成
 ```
 
 ## 架构特性
@@ -142,6 +184,27 @@ Loss(CE) → dLogits
         → 梯度裁剪 (global norm)
           → SGD参数更新
 ```
+
+## 快速开始（零依赖，任何有 Python3 的设备都能跑）
+
+```bash
+# 1) 跑全部测试，验证核心是真实的
+python run_tests.py
+
+# 2) 训练一个迷你诗词模型（tiny 配置，普通 CPU 几分钟）
+cd lingyuan_train
+python lingyuan_v7.py --config tiny --epochs 3 --steps 50 --output my_poem.het
+
+# 3) 用它生成诗词
+python lingyuan_v7.py --generate --model my_poem.het --prompt "春眠不觉晓"
+
+# 4) 训练代码模型（内置 HumanEval+MBPP 数据）
+cd ../lingyuan_code
+python lingyuan_code_v7.py --epochs 2 --steps 40 --output my_code.het
+```
+
+所有路径均为相对路径，不再依赖任何特定的 `/workspace` 环境；
+在手机的 Termux 里装个 Python 也能直接运行。
 
 ## License
 

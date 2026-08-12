@@ -1,18 +1,28 @@
-[
-  {
-    "prompt": "def fibonacci(n):\n    ",
-    "generated": "def fibonacci(n):\n    at\n<UNK>tiefntr:tteo:,oro\nhar()niorfu ft=tairar e:=s"
+{
+  "_meta": {
+    "model": "lingyuan_code/lingyuan_code_real_bp.het",
+    "note": "真实模型的真实输出（未做任何修饰）。模型为100万参数级实验模型，输出质量有限，仅用于验证生成链路真实可运行。",
+    "generated_at": "2026-08-12",
+    "temperature": 0.2,
+    "top_k": 10,
+    "max_new": 64
   },
-  {
-    "prompt": "def binary_search(arr, target):\n    ",
-    "generated": "def binary_search(arr, target):\n    \nno\nnnoh\nr((<UNK>t(el neaunrt:rtie1=,oortfi\nna=e,1u\n"
-  },
-  {
-    "prompt": "def is_prime(n):\n    ",
-    "generated": "def is_prime(n):\n    iireif=+ta]rpohtii(ci\"e(etftafuti[r=ta(((ernfa t"
-  },
-  {
-    "prompt": "def quicksort(arr):\n    ",
-    "generated": "def quicksort(arr):\n    1nnno:ouos\n=or\nt xsmssf<UNK>s<UNK>= nsn:nrnnoortsr<UNK>l\n\ntt"
-  }
-]
+  "samples": [
+    {
+      "prompt": "def fibonacci(n):\n    ",
+      "generated": "def fibonacci(n):\n                                                                    "
+    },
+    {
+      "prompt": "def binary_search(arr, target):\n    ",
+      "generated": "def binary_search(arr, target):\n                                                                    "
+    },
+    {
+      "prompt": "def is_prime(n):\n    ",
+      "generated": "def is_prime(n):\n                                                                    "
+    },
+    {
+      "prompt": "def quicksort(arr):\n    ",
+      "generated": "def quicksort(arr):\n                                                                    "
+    }
+  ]
+}

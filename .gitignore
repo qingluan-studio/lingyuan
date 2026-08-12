@@ -6,3 +6,8 @@ __pycache__/
 node_modules/
 *.log
 .trae-html-share-packages/
+.screenshots/
+.uploads/
+lingyuan_config/
+lingyuan_data/
+lingyuan_logs/

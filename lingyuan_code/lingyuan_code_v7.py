@@ -13,7 +13,8 @@ from typing import List, Dict, Tuple, Optional
 from dataclasses import dataclass
 
 # 导入V7核心架构
-sys.path.insert(0, "/workspace/lingyuan_train")
+_HERE = os.path.dirname(os.path.abspath(__file__))
+sys.path.insert(0, os.path.join(_HERE, "..", "lingyuan_train"))
 from lingyuan_v7 import (
     Tensor, glorot, CharTokenizer, TextDataLoader,
     ModelConfig, LingyuanModel, Trainer
@@ -516,7 +517,7 @@ def parse_json(text):
 def to_json(obj):
     return json.dumps(obj, indent=2, ensure_ascii=False)
 """},
-    {"lang": "python", "desc": "正则匹配", "code": """import re
+    {"lang": "python", "desc": "正则匹配", "code": r"""import re
 
 def find_emails(text):
     pattern = r'[\w.+-]+@[\w-]+\.[\w.-]+'
@@ -787,8 +788,8 @@ class CodeTrainer:
 
 def main():
     parser = argparse.ArgumentParser(description="灵元代码模型 V7.0 ULTRA Code")
-    parser.add_argument("--humaneval", type=str, default="/workspace/lingyuan_code/data/humaneval.jsonl")
-    parser.add_argument("--mbpp", type=str, default="/workspace/lingyuan_code/data/mbpp.jsonl")
+    parser.add_argument("--humaneval", type=str, default=os.path.join(_HERE, "data", "humaneval.jsonl"))
+    parser.add_argument("--mbpp", type=str, default=os.path.join(_HERE, "data", "mbpp.jsonl"))
     parser.add_argument("--epochs", type=int, default=10)
     parser.add_argument("--steps", type=int, default=40)
     parser.add_argument("--batch-size", type=int, default=2)
@@ -801,7 +802,7 @@ def main():
     parser.add_argument("--output", type=str, default="lingyuan_code_v7.het")
     args = parser.parse_args()
 
-    output_dir = "/workspace/lingyuan_code"
+    output_dir = _HERE
     os.makedirs(output_dir, exist_ok=True)
 
     print("=" * 60)
